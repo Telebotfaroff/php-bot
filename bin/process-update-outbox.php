@@ -12,6 +12,7 @@ use App\Support\Logger;
 use App\Services\CollectionDeliveryService;
 use App\Services\PostWizardService;
 use App\Services\PremiumService;
+use App\Services\ReferralService;
 use App\Services\WalletService;
 
 if (PHP_SAPI !== 'cli') {
@@ -29,7 +30,8 @@ try {
     $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
     $wallet = new WalletService($pdo, $settings);
     $premium = new PremiumService($pdo);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium);
+    $referrals = new ReferralService($pdo);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals);
     $completed = (new UpdateOutbox($pdo, $router))->dispatchDue(25);
     fwrite(STDOUT, 'Outbox jobs completed: ' . $completed . PHP_EOL);
 } catch (Throwable $exception) {

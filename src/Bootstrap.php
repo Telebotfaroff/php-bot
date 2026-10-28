@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Support\Logger;
-use Throwable;
 
 spl_autoload_register(static function (string $class): void {
     $prefix = 'App\\';
@@ -29,7 +28,7 @@ set_error_handler(static function (
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
 
-set_exception_handler(static function (Throwable $exception): void {
+set_exception_handler(static function (\Throwable $exception): void {
     Logger::exception('Uncaught application exception', $exception);
     if (!headers_sent()) {
         http_response_code(500);

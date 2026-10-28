@@ -160,13 +160,18 @@ final class UpdateRouter
 
             $path = null;
             try {
-                $path = (new DatabaseBackupService(Connection::make()))->createTemporaryBackup();
+                $backupService = new DatabaseBackupService(Connection::make());
+                $path = $backupService->createTemporaryBackup();
+                $preview = $backupService->validateBackupFile($path);
                 $filename = 'php-bot-backup-' . gmdate('Ymd-His') . '.json';
                 $this->telegram->sendDocument(
                     $context->chatId,
                     $path,
                     $filename,
-                    '🔐 Logical backup created. Sensitive bot settings are excluded. Store this file privately.'
+                    '🔐 Backup validated (dry run only). Tables: ' . $preview['table_count']
+                    . '; rows: ' . $preview['row_count']
+                    . '; created UTC: ' . $preview['created_at_utc']
+                    . '. Sensitive settings excluded. No database rows were changed. Store this file privately.'
                 );
             } catch (\Throwable $exception) {
                 $this->telegram->sendMessage($context->chatId, 'Backup failed safely. Check the private application logs and database size/configuration.');

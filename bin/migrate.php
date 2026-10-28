@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Database\Connection;
+use App\Database\MigrationRunner;
+
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
     exit("Not found\n");
 }
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
-
-use App\Database\Connection;
-use App\Database\MigrationRunner;
 
 try {
     $pdo = Connection::make();

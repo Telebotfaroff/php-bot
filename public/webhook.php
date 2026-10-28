@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Config\Config;
 use App\Database\Connection;
 use App\Database\SettingsRepository;
+use App\Database\UpdateOutbox;
 use App\Database\UpdateProcessor;
 use App\Security\AdminAuthorizer;
 use App\Security\WebhookVerifier;
@@ -43,35 +44,38 @@ try {
     }
 
     $update = json_decode($rawBody, true);
-    if (!is_array($update) || filter_var($update['update_id'] ?? null, FILTER_VALIDATE_INT) === false
-        || filter_var($update['update_id'] ?? null, FILTER_VALIDATE_INT) === null
-        || (int) $update['update_id'] < 0) {
+    $updateId = is_array($update) ? filter_var($update['update_id'] ?? null, FILTER_VALIDATE_INT) : false;
+    if (!is_array($update) || $updateId === false || $updateId === null || $updateId < 0) {
         http_response_code(400);
         echo json_encode(['ok' => false, 'error' => 'Invalid Telegram update']);
         exit;
     }
 
-    // Persist the update first. Only new updates reach the command router.
     $pdo = Connection::make();
     $processor = new UpdateProcessor($pdo);
     $isNewUpdate = $processor->process($update);
-    Logger::info($isNewUpdate ? 'Telegram update stored' : 'Duplicate Telegram update ignored', [
-        'update_id' => (int) $update['update_id'],
-    ]);
 
-    if ($isNewUpdate) {
-        $router = new UpdateRouter(
-            new BotApiClient(),
-            new SettingsRepository($pdo),
-            new AdminAuthorizer()
-        );
-        $router->dispatch($update);
-    }
+    // Always retry the durable job, including when Telegram redelivers a duplicate update.
+    // Once the update is committed to the outbox, a Telegram API failure must not lose it.
+    $router = new UpdateRouter(
+        new BotApiClient(),
+        new SettingsRepository($pdo),
+        new AdminAuthorizer()
+    );
+    $outbox = new UpdateOutbox($pdo, $router);
+    $dispatched = $outbox->dispatchOne((int) $updateId);
+
+    Logger::info('Telegram update accepted by durable outbox', [
+        'update_id' => (int) $updateId,
+        'new_update' => $isNewUpdate,
+        'dispatched_now' => $dispatched,
+    ]);
 
     http_response_code(200);
     echo json_encode(['ok' => true]);
 } catch (Throwable $exception) {
-    Logger::exception('Webhook processing failed', $exception);
+    // Return non-2xx only when the update could not be safely accepted/stored.
+    Logger::exception('Webhook could not persist Telegram update', $exception);
     http_response_code(503);
     echo json_encode(['ok' => false, 'error' => 'Service unavailable']);
 }

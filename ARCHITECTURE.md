@@ -79,7 +79,10 @@ This is a target structure, not a claim that these files already exist. Phase 0 
 
 A browser return, button click, or client-supplied success parameter is not proof of completion.
 
-### Premium and referrals
+### Manual Premium purchases, subscriptions and referrals
+- The bot does not use a payment gateway or payment-provider integration.
+- Admin settings store the payment instructions to show users. A user selects a Premium plan, receives those instructions, and submits a transaction/reference plus optional screenshot. The bot creates a pending purchase request; this submission does not grant Premium.
+- An authorized admin checks the payment outside the bot and explicitly approves or rejects the request. Approval must be transactional, idempotent and audited, including the approving admin, timestamp, selected plan/price snapshot, submitted reference and decision. Duplicate approval actions must not grant duplicate subscription time.
 - Subscription records store start/end times and the plan/terms used at purchase.
 - Active Premium means access bypass only; it is not a coin package or an extra-perks bundle.
 - A referral reward is a separate auditable event granting the referrer 24 hours of Premium after the configured qualifying action. If Premium is active, extend from the current expiry; otherwise start from the current time.
@@ -107,7 +110,7 @@ Use InnoDB and UTC timestamps. Exact columns, indexes and migrations are Phase 2
 | `verification_tasks` | Shortener task token, user, expected reward, expiry and verification status |
 | `provider_events` | Unique provider event IDs and verification outcomes to prevent replay |
 | `premium_plans` | Name, duration/lifetime flag, price, currency and enabled state |
-| `subscriptions` | User, plan snapshot/terms, start, expiry and status |
+| `subscriptions` | User, plan snapshot/terms, start, expiry and status |\n| `premium_purchase_requests` | User, selected plan/price snapshot, submitted reference, optional screenshot file ID, pending/approved/rejected status, reviewer, decision time and audit notes |
 | `referrals` | Referrer, referred user, attribution time and qualification status |
 | `referral_rewards` | Unique reward event and 24-hour Premium grant audit |
 | `delivery_jobs` | Collection delivery state and batch-level progress for retry safety |
@@ -137,7 +140,7 @@ Use InnoDB and UTC timestamps. Exact columns, indexes and migrations are Phase 2
 - `DeliveryService`: ordered batch sends and retry state.
 - `WalletService`: atomic balance changes and ledger entries.
 - `ShortenerService`: provider adapter interface and verified reward handling.
-- `PremiumService`: plan management, subscription state and expiry.
+- `PremiumService`: plan management, subscription state and expiry.\n- `ManualPaymentService`: create pending purchase requests, store payment instructions, and apply admin approve/reject decisions exactly once.
 - `ReferralService`: attribution, qualification and Premium reward.
 - `SettingsService`: validated persistent settings.
 - `DeletionScheduler` and worker: durable scheduled deletion.
@@ -173,7 +176,23 @@ Confirm these on the actual hosting account:
 
 ## 8. Decisions intentionally left open
 - Shortener provider and its exact server-side verification contract.
-- Payment provider and payment methods/currency.
+- Manual payment method/instructions, displayed currency/price and the authorized admin(s) who review requests.
 - Actual cPanel PHP/CLI/cron/outbound-network capabilities.
 - Whether Composer is available and which test runner can run in the environment.
 - Exact message deletion categories and durations, which should be configurable in admin settings.
+
+
+## 9. Manual payment request lifecycle
+
+1. User opens Premium plans and selects an enabled plan.
+2. Bot creates a pending purchase request with a snapshot of the plan name, duration, price and currency, then displays admin-configured payment instructions.
+3. User submits a transaction/reference and may attach a Telegram screenshot. The bot stores the request as pending and informs the admin. The attachment/reference is evidence for review, not proof of settlement.
+4. An authorized admin reviews the payment outside the bot and selects Approve or Reject. Optional notes may be stored for audit.
+5. Approval and subscription creation happen in one database transaction. A unique decision/approval key prevents repeated clicks or duplicate Telegram updates from granting Premium twice. The bot notifies the user of the result.
+6. Rejected requests do not grant Premium. A user who made a genuine payment can contact the admin or submit a new request according to the configured policy.
+
+Recommended additional integrity rules:
+- Use a `premium_purchase_requests` status transition such as `pending -> approved|rejected`; do not permit a second terminal decision to silently overwrite the first.
+- Restrict approve/reject callbacks to configured admins and verify authorization on every action.
+- Keep an audit log for creation, review and decision; do not expose one user's payment reference or screenshot to other users.
+- Do not collect OTPs, PINs, passwords, card CVVs or banking login credentials.

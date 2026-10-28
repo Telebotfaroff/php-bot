@@ -91,9 +91,12 @@
 - No payment gateway, payment-provider webhook, or automatic payment verification is required.
 - Exit: active Premium bypasses coins; expiry restores normal rules; pending requests never grant access.
 
-### Phase 9 — Shortener provider integration
-- Implement one documented provider adapter at a time with server-side verification, replay protection and provider failure handling.
-- Exit: simulated and real supported callbacks are validated; repeated callbacks cannot double-credit.
+### Phase 9 — Shortener provider integration (secure callback foundation implemented; provider-specific adapter pending)
+- Added `ShortenerCallbackVerifier` and `public/shortener-callback.php`: HMAC-SHA256 signature verification, five-minute timestamp window, configured-provider matching, and transactional/idempotent wallet credit through `WalletService`.
+- Added security tests for valid signatures, tampering, stale timestamps, provider mismatch and weak secrets.
+- This is a normalized callback contract, not a finished provider integration: an adapter must authenticate the provider's native server-to-server event and map it to this contract. Do not enable rewards from browser returns alone.
+- GPLinks' published terms prohibit incentivized clicks, so do not use it for coin-for-completion rewards without explicit written permission. Select a provider that permits incentivized traffic and supports server-side completion verification.
+- Exit: implement and test a provider-specific adapter and link-creation flow before enabling Get Coins.
 
 ### Phase 10 — Referral rewards
 - Attribution, qualification event, fraud guards and auditable 24-hour Premium reward.

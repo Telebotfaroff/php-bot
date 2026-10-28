@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Config\Config;
+use App\Database\Connection;
+use App\Database\UpdateProcessor;
 use App\Security\WebhookVerifier;
 use App\Support\Logger;
 

@@ -38,19 +38,18 @@ Set these in the Koyeb service's environment/secrets settings. Never commit real
 | `DB_USER` | Yes | Database username |
 | `DB_PASSWORD` | Yes | Database password |
 | `DB_CHARSET` | Recommended | `utf8mb4` |
+| `DB_SSL_MODE` | Optional | Set to `required` for TLS-enabled providers such as Aiven |
+| `DB_SSL_CA` | Optional | Path to provider CA certificate inside the container; enables certificate verification |
+| `AUTO_MIGRATE` | Optional | Defaults to `true`; runs pending migrations before Apache/workers start |
 | `LOG_FILE` | Optional | `/dev/stderr` or a writable path; platform logs are preferred |
 
-Do not set `BOT_CONFIG_FILE` on Koyeb unless you deliberately mount a persistent secret file. Environment variables take precedence over private-file values.
+When `DB_SSL_MODE=required`, TLS is enabled. For full server identity verification, also provide the provider CA certificate through `DB_SSL_CA`. Without a CA file, TLS encryption is requested but certificate identity verification is disabled. Do not set `BOT_CONFIG_FILE` on Koyeb unless you deliberately mount a persistent secret file. Environment variables take precedence over private-file values.
 
-## Database migration
+## Automatic database migrations
 
-Run migrations once after the service environment is configured and the database is reachable. From a shell with PHP 8.1+, cURL and PDO MySQL installed, clone/check out the `deploy/koyeb` branch, export the same environment variables, then run:
+On container startup, `docker/entrypoint.sh` runs `php bin/migrate.php` before starting Apache and the background workers. The migration runner records applied migration files and skips them on subsequent restarts. If the database is unreachable or a migration fails, the container exits rather than serving an app with an uninitialized schema. Keep the service at one instance while using the built-in workers and automatic migrations; do not run multiple instances concurrently during startup.
 
-```sh
-php bin/migrate.php
-```
-
-Alternatively, run the command through a one-off/console facility if available for your Koyeb plan. Do not run migrations on every HTTP request or start multiple migration processes concurrently.
+To disable this behavior, set `AUTO_MIGRATE=false` and run migrations manually using `php bin/migrate.php` from a PHP CLI environment with the same environment variables.
 
 ## Register the Telegram webhook
 
@@ -74,14 +73,13 @@ These workers restart automatically if they exit. They require the database and 
 
 1. Open `https://YOUR-KOYEB-DOMAIN/health.php` and confirm it returns `ok`.
 2. Confirm `https://YOUR-KOYEB-DOMAIN/install.php` is blocked; the web installer is intentionally disabled in this container.
-3. Run `php bin/check-deployment.php` from a CLI environment with the same environment variables.
-4. Check Koyeb logs for Apache startup and worker output.
-5. Send `/start` to the bot and test a private collection link before enabling auto-delete.
+3. Check Koyeb logs for the migration output, Apache startup, and worker output.
+4. Send `/start` to the bot and test a private collection link before enabling auto-delete.
 
 ## Notes and limitations
 
 - The Koyeb image runs Apache and both worker loops in one service. If you later scale to multiple instances, every instance would start workers too; keep one instance unless you move workers to a dedicated single-instance service.
 - Local container files are ephemeral. Configuration is expected to come from environment variables; do not rely on files written by the web installer.
 - Worker scheduling is best-effort and pauses when the service is stopped or redeploying. It is not a precise cron scheduler.
-- The health endpoint checks PHP runtime/extensions, not database or Telegram connectivity. Use the CLI preflight for full checks.
+- The health endpoint checks PHP runtime/extensions, not database or Telegram connectivity.
 - Koyeb plan availability, resource limits, and free-tier terms can change. Check the current Koyeb dashboard and pricing before relying on free hosting.

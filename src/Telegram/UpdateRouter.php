@@ -6,6 +6,8 @@ namespace App\Telegram;
 
 use App\Config\Config;
 use App\Database\SettingsRepository;
+use App\Database\Connection;
+use App\Services\DatabaseBackupService;
 use App\Security\AdminAuthorizer;
 use App\Services\CollectionDeliveryService;
 use App\Services\PostWizardService;

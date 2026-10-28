@@ -12,6 +12,7 @@ header('Referrer-Policy: no-referrer');
 header('Cache-Control: no-store');
 
 $projectRoot = dirname(__DIR__);
+require_once $projectRoot . '/src/Bootstrap.php';
 $configDirectory = dirname(__DIR__, 2) . '/private';
 $configPath = $configDirectory . '/php-bot-config.php';
 $documentRoot = realpath((string) ($_SERVER['DOCUMENT_ROOT'] ?? '')) ?: '';
@@ -142,7 +143,6 @@ if (!$installed && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $_ENV['BOT_CONFIG_FILE'] = $tempConfig;
         $_SERVER['BOT_CONFIG_FILE'] = $tempConfig;
 
-        require_once $projectRoot . '/src/Bootstrap.php';
         $pdo = Connection::make();
         $pdo->query('SELECT 1')->fetchColumn();
 

@@ -11,6 +11,7 @@ use App\Telegram\UpdateRouter;
 use App\Support\Logger;
 use App\Services\CollectionDeliveryService;
 use App\Services\PostWizardService;
+use App\Services\WalletService;
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -25,7 +26,8 @@ try {
     $settings = new SettingsRepository($pdo);
     $wizard = new PostWizardService($pdo, $telegram, $settings);
     $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery);
+    $wallet = new WalletService($pdo, $settings);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet);
     $completed = (new UpdateOutbox($pdo, $router))->dispatchDue(25);
     fwrite(STDOUT, 'Outbox jobs completed: ' . $completed . PHP_EOL);
 } catch (Throwable $exception) {

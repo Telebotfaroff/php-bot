@@ -144,6 +144,111 @@ final class WalletService
         }
     }
 
+
+    /** @return array{id:int,code:string,reward:int,max_uses:int,expires_at:string} */
+    public function createPromoCode(string $code, int $reward, int $maxUses, int $expiryDays, int $createdBy): array
+    {
+        $code = strtoupper(trim($code));
+        if (!preg_match('/^[A-Z0-9_-]{3,32}$/', $code)) {
+            throw new RuntimeException('Promo code must be 3–32 letters, numbers, _ or -.');
+        }
+        if ($reward < 1 || $reward > 1000000000) throw new RuntimeException('Coins must be between 1 and 1000000000.');
+        if ($maxUses < 1 || $maxUses > 1000000) throw new RuntimeException('Maximum users must be between 1 and 1000000.');
+        if ($expiryDays < 1 || $expiryDays > 3650) throw new RuntimeException('Expiry must be between 1 and 3650 days.');
+
+        $statement = $this->pdo->prepare(
+            'INSERT INTO promo_codes (code, reward_coins, max_uses, expires_at, created_by)
+             VALUES (:code, :reward, :max_uses, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL :days DAY), :created_by)'
+        );
+        try {
+            $statement->bindValue('code', $code, PDO::PARAM_STR);
+            $statement->bindValue('reward', $reward, PDO::PARAM_INT);
+            $statement->bindValue('max_uses', $maxUses, PDO::PARAM_INT);
+            $statement->bindValue('days', $expiryDays, PDO::PARAM_INT);
+            $statement->bindValue('created_by', $createdBy, PDO::PARAM_INT);
+            $statement->execute();
+        } catch (\\PDOException $exception) {
+            if ((string) $exception->getCode() === '23000') throw new RuntimeException('That promo code already exists.');
+            throw $exception;
+        }
+        $id = (int) $this->pdo->lastInsertId();
+        $query = $this->pdo->prepare('SELECT DATE_FORMAT(expires_at, \'%Y-%m-%d %H:%i:%s\') FROM promo_codes WHERE id = :id');
+        $query->execute(['id' => $id]);
+        return ['id' => $id, 'code' => $code, 'reward' => $reward, 'max_uses' => $maxUses, 'expires_at' => (string) $query->fetchColumn()];
+    }
+
+    /** @return list<array{code:string,reward_coins:int,max_uses:int,redeemed_count:int,expires_at:string,is_active:int}> */
+    public function recentPromoCodes(int $limit = 10): array
+    {
+        $limit = max(1, min(25, $limit));
+        $query = $this->pdo->query(
+            'SELECT code, reward_coins, max_uses, redeemed_count,
+                    DATE_FORMAT(expires_at, \'%Y-%m-%d %H:%i:%s\') AS expires_at, is_active
+             FROM promo_codes ORDER BY id DESC LIMIT ' . $limit
+        );
+        return $query->fetchAll();
+    }
+
+    /** @return array{status:string,coins?:int,balance?:int} */
+    public function redeemPromoCode(int $userId, string $rawCode): array
+    {
+        $code = strtoupper(trim($rawCode));
+        if (!preg_match('/^[A-Z0-9_-]{3,32}$/', $code)) return ['status' => 'not_found'];
+
+        $this->pdo->beginTransaction();
+        try {
+            $query = $this->pdo->prepare('SELECT * FROM promo_codes WHERE code = :code FOR UPDATE');
+            $query->execute(['code' => $code]);
+            $promo = $query->fetch();
+            if (!is_array($promo)) {
+                $this->pdo->rollBack();
+                return ['status' => 'not_found'];
+            }
+            if (!(bool) $promo['is_active'] || strtotime((string) $promo['expires_at']) <= time()) {
+                $this->pdo->commit();
+                return ['status' => 'expired'];
+            }
+            if ((int) $promo['redeemed_count'] >= (int) $promo['max_uses']) {
+                $this->pdo->commit();
+                return ['status' => 'exhausted'];
+            }
+            $already = $this->pdo->prepare('SELECT id FROM promo_code_redemptions WHERE promo_code_id = :promo AND telegram_user_id = :user');
+            $already->execute(['promo' => (int) $promo['id'], 'user' => $userId]);
+            if ($already->fetchColumn() !== false) {
+                $this->pdo->commit();
+                return ['status' => 'already_used'];
+            }
+
+            $amount = (int) $promo['reward_coins'];
+            $this->ensureWalletRow($userId);
+            $wallet = $this->pdo->prepare('SELECT balance FROM wallet_accounts WHERE telegram_user_id = :user FOR UPDATE');
+            $wallet->execute(['user' => $userId]);
+            $balance = (int) $wallet->fetchColumn() + $amount;
+            $updateWallet = $this->pdo->prepare('UPDATE wallet_accounts SET balance = :balance WHERE telegram_user_id = :user');
+            $updateWallet->execute(['balance' => $balance, 'user' => $userId]);
+            $ledger = $this->pdo->prepare(
+                "INSERT INTO wallet_ledger (telegram_user_id, amount, balance_after, event_type, reference_key)
+                 VALUES (:user, :amount, :balance, 'promo_reward', :reference)"
+            );
+            $ledger->execute([
+                'user' => $userId, 'amount' => $amount, 'balance' => $balance,
+                'reference' => 'promo-' . (int) $promo['id'],
+            ]);
+            $redeem = $this->pdo->prepare(
+                'INSERT INTO promo_code_redemptions (promo_code_id, telegram_user_id, coins_awarded)
+                 VALUES (:promo, :user, :coins)'
+            );
+            $redeem->execute(['promo' => (int) $promo['id'], 'user' => $userId, 'coins' => $amount]);
+            $count = $this->pdo->prepare('UPDATE promo_codes SET redeemed_count = redeemed_count + 1 WHERE id = :id');
+            $count->execute(['id' => (int) $promo['id']]);
+            $this->pdo->commit();
+            return ['status' => 'redeemed', 'coins' => $amount, 'balance' => $balance];
+        } catch (\\Throwable $exception) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $exception;
+        }
+    }
+
     private function creditOnce(int $userId, int $amount, string $eventType, string $reference): int
     {
         $this->pdo->beginTransaction();

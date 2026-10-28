@@ -36,15 +36,16 @@
 - GitHub Actions PHP syntax checks and Phase 1 smoke tests passed in the reported workflow run.
 - Exit: syntax and webhook-secret smoke checks passed.
 
-### Phase 2 — Database and update processing (implemented; CI verification pending)
-- Added PDO MySQL/MariaDB connection factory, configurable database settings, versioned PHP migrations, CLI migration command, initial `users` and `telegram_updates` tables, and transactional update persistence with duplicate-update protection.
-- Webhook now persists valid updates and sender profiles when available; bot command handling is still a later phase.
+### Phase 2 — Database and update processing (implemented; CI reported passing by user)
+- Added PDO MySQL/MariaDB connection factory, configurable database settings, versioned PHP migrations, CLI migration command, `users`, `telegram_updates`, and `bot_settings` tables, and transactional update persistence with duplicate-update protection.
 - Added a MySQL-backed GitHub Actions integration test for migration idempotency, update deduplication and sender persistence.
-- Exit: confirm the new GitHub Actions run passes; apply migrations on the intended database before enabling the webhook.
+- Exit: database migration and duplicate-update tests passed in the user's reported CI run; production migrations still must be applied to the target database.
 
-### Phase 3 — Admin authorization and settings
-- Secure owner/admin commands and persistent settings for channel IDs and feature values.
-- Exit: unauthorized users cannot invoke admin actions; settings survive restarts.
+### Phase 3 — Admin authorization and initial command router (implemented; CI verification pending)
+- Added owner-only authorization from `BOT_OWNER_ID`, normalized update context, persistent settings repository, and a read-only `/settings` view that hides sensitive setting values.
+- Added `/start`, `/help`, `/id`, `/setting`, and `/settings` basic command handlers and a Phase 3 authorization/context test suite.
+- The settings view is read-only; CRUD editing and the full bot features are not implemented yet.
+- Exit: confirm the latest GitHub Actions run passes; then add editable, validated settings before building the `/post` wizard.
 
 ### Phase 4 — Collection posting wizard and dump storage
 - Implement draft state machine, thumbnail skip, title, multiple videos, bot-managed copying to dump channel, ordering, cancellation and recovery.

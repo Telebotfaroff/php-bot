@@ -164,7 +164,11 @@ final class PostWizardService
         }
 
         if ($draft['state'] === 'preview') {
-            $this->telegram->sendMessage($chatId, 'Your draft is ready for review. Use the Publish or Cancel buttons on the preview.');
+            if ($text !== null && strtolower(trim($text)) === '/done') {
+                $this->preparePreview($draftId, $ownerId, $chatId);
+            } else {
+                $this->telegram->sendMessage($chatId, 'Your draft is ready for review. Use the Publish or Cancel buttons on the preview, or send /done to show the preview again.');
+            }
             return true;
         }
 

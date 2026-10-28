@@ -7,7 +7,7 @@ putenv('WEBHOOK_SECRET=phase1-test-secret');
 require dirname(__DIR__) . '/src/Bootstrap.php';
 
 $checks = [
-    'accepts matching secret' => \App\Security\\App\Security\WebhookVerifier::isValid('phase1-test-secret'),
+    'accepts matching secret' => \App\Security\WebhookVerifier::isValid('phase1-test-secret'),
     'rejects incorrect secret' => !\App\Security\WebhookVerifier::isValid('wrong-secret'),
     'rejects missing secret' => !\App\Security\WebhookVerifier::isValid(null),
 ];

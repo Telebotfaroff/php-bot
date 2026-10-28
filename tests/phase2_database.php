@@ -148,4 +148,25 @@ check(!$self['rewarded'], 'start without referral does not issue a referral rewa
 $stats = $referrals->stats($referrerId);
 check($stats['qualified'] === 1 && $stats['rewards'] === 1, 'referral stats count the reward exactly once');
 
+
+$adminFeatures = new AdminFeatureService($pdo);
+$moderatedUser = random_int(400000000, 449999999);
+$processor->process([
+    'update_id' => random_int(2000000000, 2099999999),
+    'message' => ['from' => ['id' => $moderatedUser, 'is_bot' => false, 'first_name' => 'Moderation Test']],
+]);
+check($adminFeatures->setBanned($moderatedUser, 123456789, true, 'automated test'), 'bans a known user');
+check($adminFeatures->isBanned($moderatedUser), 'ban status is enforced by service lookup');
+$moderated = $adminFeatures->user($moderatedUser);
+check(is_array($moderated) && (int) $moderated['is_banned'] === 1 && $moderated['ban_reason'] === 'automated test', 'user inspection returns ban metadata');
+check($adminFeatures->setBanned($moderatedUser, 123456789, false), 'unbans a user');
+check(!$adminFeatures->isBanned($moderatedUser), 'unban clears active restriction');
+$emptySearch = $adminFeatures->searchCollections($moderatedUser, 'no-result-query');
+check($emptySearch === [], 'search returns an empty result set without error');
+$searchCount = $pdo->prepare('SELECT COUNT(*) FROM bot_search_events WHERE telegram_user_id = :user');
+$searchCount->execute(['user' => $moderatedUser]);
+check((int) $searchCount->fetchColumn() === 1, 'search analytics record query hash and result count');
+$stats = $adminFeatures->stats();
+check(isset($stats['users_total'], $stats['collections'], $stats['files'], $stats['pending_jobs']), 'analytics dashboard aggregates core metrics');
+
 echo 'Phase 2 database tests passed.' . PHP_EOL;

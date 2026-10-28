@@ -18,7 +18,6 @@ final class Connection
         } else {
             $host = Config::requireString('DB_HOST');
             $name = Config::requireString('DB_NAME');
-            $user = Config::requireString('DB_USER');
             $port = (string) Config::get('DB_PORT', '3306');
             $charset = (string) Config::get('DB_CHARSET', 'utf8mb4');
 
@@ -37,11 +36,37 @@ final class Connection
             throw new RuntimeException('DB_PASSWORD must be a string.');
         }
 
-        return new PDO($dsn, (string) Config::get('DB_USER', ''), $password, [
+        $options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
             PDO::ATTR_STRINGIFY_FETCHES => false,
-        ]);
+        ];
+
+        $sslMode = strtolower((string) Config::get('DB_SSL_MODE', 'disabled'));
+        if (!in_array($sslMode, ['disabled', 'required'], true)) {
+            throw new RuntimeException('DB_SSL_MODE must be disabled or required.');
+        }
+
+        if ($sslMode === 'required') {
+            if (!defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) {
+                throw new RuntimeException('PDO MySQL SSL options are unavailable in this PHP runtime.');
+            }
+
+            $caFile = Config::get('DB_SSL_CA');
+            if (is_string($caFile) && trim($caFile) !== '') {
+                if (!is_file($caFile) || !is_readable($caFile)) {
+                    throw new RuntimeException('DB_SSL_CA must point to a readable CA certificate file.');
+                }
+                $options[PDO::MYSQL_ATTR_SSL_CA] = $caFile;
+                $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+            } else {
+                // Encrypt the connection when the provider requires TLS. For strict
+                // server identity verification, configure DB_SSL_CA with the provider CA.
+                $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
+            }
+        }
+
+        return new PDO($dsn, (string) Config::get('DB_USER', ''), $password, $options);
     }
 }

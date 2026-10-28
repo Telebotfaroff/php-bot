@@ -80,8 +80,8 @@ This is a target structure, not a claim that these files already exist. Phase 0 
 A browser return, button click, or client-supplied success parameter is not proof of completion.
 
 ### Manual Premium purchases, subscriptions and referrals
-- The bot does not use a payment gateway or payment-provider integration.
-- Admin settings store the payment instructions to show users. A user selects a Premium plan, receives those instructions, and submits a transaction/reference plus optional screenshot. The bot creates a pending purchase request; this submission does not grant Premium.
+- The bot does not use a payment gateway or payment-provider integration. Supported manual methods are UPI and cryptocurrency.
+- Admin settings store separate UPI and cryptocurrency instructions. For UPI, the admin may configure a UPI ID and instructions or QR image; for crypto, configure the accepted network and wallet address. These are settings, not source-code constants. A user selects a Premium plan and payment method, then receives the matching instructions, and submits a transaction/reference plus optional screenshot. The bot creates a pending purchase request; this submission does not grant Premium.
 - An authorized admin checks the payment outside the bot and explicitly approves or rejects the request. Approval must be transactional, idempotent and audited, including the approving admin, timestamp, selected plan/price snapshot, submitted reference and decision. Duplicate approval actions must not grant duplicate subscription time.
 - Subscription records store start/end times and the plan/terms used at purchase.
 - Active Premium means access bypass only; it is not a coin package or an extra-perks bundle.
@@ -110,7 +110,8 @@ Use InnoDB and UTC timestamps. Exact columns, indexes and migrations are Phase 2
 | `verification_tasks` | Shortener task token, user, expected reward, expiry and verification status |
 | `provider_events` | Unique provider event IDs and verification outcomes to prevent replay |
 | `premium_plans` | Name, duration/lifetime flag, price, currency and enabled state |
-| `subscriptions` | User, plan snapshot/terms, start, expiry and status |\n| `premium_purchase_requests` | User, selected plan/price snapshot, submitted reference, optional screenshot file ID, pending/approved/rejected status, reviewer, decision time and audit notes |
+| `subscriptions` | User, plan snapshot/terms, start, expiry and status |
+| `premium_purchase_requests` | User, selected plan/price snapshot, submitted reference, optional screenshot file ID, pending/approved/rejected status, reviewer, decision time and audit notes |
 | `referrals` | Referrer, referred user, attribution time and qualification status |
 | `referral_rewards` | Unique reward event and 24-hour Premium grant audit |
 | `delivery_jobs` | Collection delivery state and batch-level progress for retry safety |
@@ -140,7 +141,8 @@ Use InnoDB and UTC timestamps. Exact columns, indexes and migrations are Phase 2
 - `DeliveryService`: ordered batch sends and retry state.
 - `WalletService`: atomic balance changes and ledger entries.
 - `ShortenerService`: provider adapter interface and verified reward handling.
-- `PremiumService`: plan management, subscription state and expiry.\n- `ManualPaymentService`: create pending purchase requests, store payment instructions, and apply admin approve/reject decisions exactly once.
+- `PremiumService`: plan management, subscription state and expiry.
+- `ManualPaymentService`: create pending purchase requests, store payment instructions, and apply admin approve/reject decisions exactly once.
 - `ReferralService`: attribution, qualification and Premium reward.
 - `SettingsService`: validated persistent settings.
 - `DeletionScheduler` and worker: durable scheduled deletion.
@@ -172,17 +174,17 @@ Confirm these on the actual hosting account:
 7. PHP execution-time and memory limits; webhook must remain fast and workers bounded.
 8. Ability to store logs and configuration outside public web root, or suitable access protections if hosting layout prevents this.
 9. Telegram bot permissions in dump and post channels, including ability to send/copy messages and delete its own messages where needed.
-10. The chosen shortener provider's documented server-side verification method and chosen payment provider's webhook support.
+10. The chosen shortener provider's documented server-side verification method. Admins must configure UPI instructions and the accepted cryptocurrency network/address; no payment-provider webhook is needed.
 
 ## 8. Decisions intentionally left open
 - Shortener provider and its exact server-side verification contract.
-- Manual payment method/instructions, displayed currency/price and the authorized admin(s) who review requests.
+- UPI instructions/QR, accepted cryptocurrency network and wallet address, displayed plan prices/currency, and authorized admin(s) who review requests.
 - Actual cPanel PHP/CLI/cron/outbound-network capabilities.
 - Whether Composer is available and which test runner can run in the environment.
 - Exact message deletion categories and durations, which should be configurable in admin settings.
 
 
-## 9. Manual payment request lifecycle
+## 9. UPI and cryptocurrency manual payment request lifecycle
 
 1. User opens Premium plans and selects an enabled plan.
 2. Bot creates a pending purchase request with a snapshot of the plan name, duration, price and currency, then displays admin-configured payment instructions.

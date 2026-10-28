@@ -16,7 +16,8 @@ Target branch: `deploy/koyeb`. Runtime remains PHP 8.3 + Apache on port 8080, PD
 - Implemented owner-only `/backup` in a private bot chat; it sends a logical JSON export directly to the owner and deletes the temporary server file.
 - Sensitive `bot_settings` entries whose keys contain token, secret, password, API key, private key, credential, or webhook are excluded.
 - Includes exported tables, row counts, UTC creation time, and applied migration records; upload is capped at 8 MB.
-- Restore is intentionally not enabled yet. Validate backup format/schema and add dry-run plus explicit confirmation before implementing any import path.
+- Before delivery, a non-destructive dry run validates JSON format/version, table names, row counts, and column names; the owner receives a table/row summary. This validation does not modify the database.
+- Restore/import remains disabled. A real restore still requires uploaded-file staging, explicit confirmation, transactional safeguards, and a rollback plan; never import an untrusted backup directly.
 - This is a convenience export, not a substitute for Aiven provider backups; large datasets require a database-provider export.
 
 ## Stage 4 — Reliability and operations

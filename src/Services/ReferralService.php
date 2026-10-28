@@ -6,10 +6,11 @@ namespace App\Services;
 
 use PDO;
 use Throwable;
+use App\Database\SettingsRepository;
 
 final class ReferralService
 {
-    public function __construct(private readonly PDO $pdo) {}
+    public function __construct(private readonly PDO $pdo, private readonly ?SettingsRepository $settings = null) {}
 
     /**
      * Mark a user's first /start and optionally qualify a referral.
@@ -35,15 +36,23 @@ final class ReferralService
 
             $mark = $this->pdo->prepare('UPDATE users SET bot_started_at = CURRENT_TIMESTAMP WHERE telegram_user_id = :id AND bot_started_at IS NULL');
             $mark->execute(['id' => $userId]);
+            $referredStatus = $this->pdo->prepare('SELECT is_banned FROM users WHERE telegram_user_id = :id FOR UPDATE');
+            $referredStatus->execute(['id' => $userId]);
+            if ((int) $referredStatus->fetchColumn() === 1) {
+                $this->pdo->commit();
+                return ['is_new' => true, 'rewarded' => false, 'referrer_id' => null];
+            }
+
             $validReferrer = $referrerId !== null && $referrerId > 0 && $referrerId !== $userId;
             if (!$validReferrer) {
                 $this->pdo->commit();
                 return ['is_new' => true, 'rewarded' => false, 'referrer_id' => null];
             }
 
-            $referrer = $this->pdo->prepare('SELECT telegram_user_id FROM users WHERE telegram_user_id = :id');
+            $referrer = $this->pdo->prepare('SELECT telegram_user_id, is_banned FROM users WHERE telegram_user_id = :id FOR UPDATE');
             $referrer->execute(['id' => $referrerId]);
-            if ($referrer->fetchColumn() === false) {
+            $referrerRow = $referrer->fetch();
+            if (!is_array($referrerRow) || (int) $referrerRow['is_banned'] === 1) {
                 $this->pdo->commit();
                 return ['is_new' => true, 'rewarded' => false, 'referrer_id' => null];
             }
@@ -58,6 +67,8 @@ final class ReferralService
                 return ['is_new' => true, 'rewarded' => false, 'referrer_id' => null];
             }
 
+            $rewardHours = max(1, min(720, (int) ($this->settings?->get('referral_reward_hours', '24') ?? '24')));
+
             $active = $this->pdo->prepare(
                 "SELECT id, expires_at FROM premium_subscriptions
                  WHERE telegram_user_id = :user AND status = 'active'
@@ -70,16 +81,16 @@ final class ReferralService
                 $subscriptionId = (int) $current['id'];
             } elseif (is_array($current)) {
                 $extend = $this->pdo->prepare(
-                    'UPDATE premium_subscriptions SET expires_at = DATE_ADD(GREATEST(expires_at, CURRENT_TIMESTAMP), INTERVAL 1 DAY) WHERE id = :id'
+                    'UPDATE premium_subscriptions SET expires_at = DATE_ADD(GREATEST(expires_at, CURRENT_TIMESTAMP), INTERVAL :hours HOUR) WHERE id = :id'
                 );
-                $extend->execute(['id' => (int) $current['id']]);
+                $extend->execute(['hours' => $rewardHours, 'id' => (int) $current['id']]);
                 $subscriptionId = (int) $current['id'];
             } else {
                 $insert = $this->pdo->prepare(
                     "INSERT INTO premium_subscriptions (telegram_user_id, starts_at, expires_at, status)
-                     VALUES (:user, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 DAY), 'active')"
+                     VALUES (:user, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL :hours HOUR), 'active')"
                 );
-                $insert->execute(['user' => $referrerId]);
+                $insert->execute(['user' => $referrerId, 'hours' => $rewardHours]);
                 $subscriptionId = (int) $this->pdo->lastInsertId();
             }
 

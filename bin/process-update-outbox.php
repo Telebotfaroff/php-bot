@@ -14,6 +14,7 @@ use App\Services\PostWizardService;
 use App\Services\PremiumService;
 use App\Services\ReferralService;
 use App\Services\WalletService;
+use App\Services\AdminFeatureService;
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -31,7 +32,7 @@ try {
     $wallet = new WalletService($pdo, $settings);
     $premium = new PremiumService($pdo);
     $referrals = new ReferralService($pdo);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals, new AdminFeatureService($pdo));
     $completed = (new UpdateOutbox($pdo, $router))->dispatchDue(25);
     fwrite(STDOUT, 'Outbox jobs completed: ' . $completed . PHP_EOL);
 } catch (Throwable $exception) {

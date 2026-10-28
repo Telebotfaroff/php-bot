@@ -13,9 +13,11 @@ Target branch: `deploy/koyeb`. Runtime remains PHP 8.3 + Apache on port 8080, PD
 - Never credit rewards from client-side claims alone.
 
 ## Stage 3 — Backup and restore
-- Owner-only logical export of bot-owned tables/settings with secrets excluded.
-- Validate archive size and schema version; restore in a dry-run/confirmation flow.
-- Prefer private server storage or a restricted admin delivery, never public links.
+- Implemented owner-only `/backup` in a private bot chat; it sends a logical JSON export directly to the owner and deletes the temporary server file.
+- Sensitive `bot_settings` entries whose keys contain token, secret, password, API key, private key, credential, or webhook are excluded.
+- Includes exported tables, row counts, UTC creation time, and applied migration records; upload is capped at 8 MB.
+- Restore is intentionally not enabled yet. Validate backup format/schema and add dry-run plus explicit confirmation before implementing any import path.
+- This is a convenience export, not a substitute for Aiven provider backups; large datasets require a database-provider export.
 
 ## Stage 4 — Reliability and operations
 - Queue health and failed-job visibility, safe retries, duplicate-update handling, bounded worker batches.

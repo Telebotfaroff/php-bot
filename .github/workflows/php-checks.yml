@@ -11,8 +11,28 @@ permissions:
 
 jobs:
   lint-and-test:
-    name: PHP syntax and smoke tests
+    name: PHP syntax and database tests
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-root-password
+          MYSQL_DATABASE: php_bot_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: php_bot_test
+      DB_USER: root
+      DB_PASSWORD: test-root-password
+      DB_CHARSET: utf8mb4
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -30,7 +50,10 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' file; do
             php -l "$file"
-          done < <(find src public bin tests -type f -name '*.php' -print0)
+          done < <(find src public bin tests database/migrations -type f -name '*.php' -print0)
 
       - name: Run Phase 1 smoke tests
         run: php tests/phase1_smoke.php
+
+      - name: Run Phase 2 database tests
+        run: php tests/phase2_database.php

@@ -12,6 +12,7 @@ use App\Security\WebhookVerifier;
 use App\Telegram\BotApiClient;
 use App\Telegram\UpdateRouter;
 use App\Support\Logger;
+use App\Services\PostWizardService;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
 
@@ -57,11 +58,10 @@ try {
 
     // Always retry the durable job, including when Telegram redelivers a duplicate update.
     // Once the update is committed to the outbox, a Telegram API failure must not lose it.
-    $router = new UpdateRouter(
-        new BotApiClient(),
-        new SettingsRepository($pdo),
-        new AdminAuthorizer()
-    );
+    $telegram = new BotApiClient();
+    $settings = new SettingsRepository($pdo);
+    $wizard = new PostWizardService($pdo, $telegram, $settings);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard);
     $outbox = new UpdateOutbox($pdo, $router);
     $dispatched = $outbox->dispatchOne((int) $updateId);
 

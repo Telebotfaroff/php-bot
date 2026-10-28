@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/src/Bootstrap.php';
-
 use App\Database\Connection;
 use App\Database\MigrationRunner;
 use App\Database\UpdateProcessor;
+
+require dirname(__DIR__) . '/src/Bootstrap.php';
 
 function check(bool $condition, string $message): void
 {

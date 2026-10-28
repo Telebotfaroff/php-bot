@@ -18,6 +18,11 @@ final class Config
 
         $fileValues = [];
         $configFile = getenv('BOT_CONFIG_FILE');
+        if (!is_string($configFile) || $configFile === '') {
+            // Default private location: sibling of the project directory, outside public_html
+            // when the project itself is deployed outside the document root.
+            $configFile = dirname(__DIR__, 3) . '/private/php-bot-config.php';
+        }
         if (is_string($configFile) && $configFile !== '' && is_file($configFile)) {
             $loaded = require $configFile;
             if (!is_array($loaded)) {

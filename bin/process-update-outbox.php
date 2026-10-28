@@ -31,7 +31,7 @@ try {
     $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
     $wallet = new WalletService($pdo, $settings);
     $premium = new PremiumService($pdo);
-    $referrals = new ReferralService($pdo);
+    $referrals = new ReferralService($pdo, $settings);
     $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals, new AdminFeatureService($pdo));
     $completed = (new UpdateOutbox($pdo, $router))->dispatchDue(25);
     fwrite(STDOUT, 'Outbox jobs completed: ' . $completed . PHP_EOL);

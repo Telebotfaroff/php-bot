@@ -1,6 +1,6 @@
 # PHP Telegram File Store Bot
 
-PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Telegram webhooks and bounded cron workers. Phase 1 security foundation, Phase 2 database persistence, and the initial Phase 3 owner authorization/settings view and basic commands are implemented; full settings editing and file-store workflows remain future phases.
+PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Telegram webhooks and bounded cron workers. The current foundation includes security, database persistence, owner authorization, a durable update outbox, and the initial collection posting wizard.
 
 ## Current foundation
 
@@ -15,7 +15,7 @@ PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Teleg
 - CLI-only database migration and webhook setup commands
 - GitHub Actions PHP syntax checks, smoke tests, MySQL integration tests, and authorization/context tests
 
-The bot is still in development. The /settings view is read-only; admin editing, collection posting, dump-channel storage, deep links, wallet, Premium, referrals and auto-delete are not implemented yet. Webhook updates are stored in a durable outbox before dispatch. Failed dispatches are retried with backoff by the webhook or CLI worker.
+The bot is still in development. The `/post` wizard can create and publish collections with permanent deep-link codes, but opening those links does not yet deliver the videos; access checks and delivery are a later phase. Full settings editing, wallet, Premium, referrals and auto-delete are not implemented yet. Webhook updates are stored in a durable outbox before dispatch. Failed dispatches are retried with backoff by the webhook or CLI worker.
 
 ## Requirements
 

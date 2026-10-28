@@ -1,18 +1,20 @@
 # PHP Telegram File Store Bot
 
-PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Telegram webhooks and bounded cron workers. Development is phased. Phase 1 runtime/security checks and Phase 2 database/update persistence are implemented; command handling is not yet implemented.
+PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Telegram webhooks and bounded cron workers. Phase 1 security foundation, Phase 2 database persistence, and the initial Phase 3 owner authorization/settings view and basic commands are implemented; full settings editing and file-store workflows remain future phases.
 
 ## Current foundation
 
 - Environment/private-file configuration loader and privacy-conscious JSON logger
 - Telegram webhook secret-token verification and Telegram Bot API client using PHP cURL/TLS
 - PDO MySQL/MariaDB connection factory using prepared statements
-- Versioned PHP migration runner and initial schema
-- Durable Telegram update ID deduplication and basic sender profile upserts
+- Versioned PHP migrations and schema for users, Telegram updates, and persistent bot settings
+- Durable Telegram update ID deduplication and sender profile upserts
+- Owner-only authorization using configured BOT_OWNER_ID
+- Basic /start, /help, /id and owner-only read-only /settings commands
 - CLI-only database migration and webhook setup commands
-- GitHub Actions PHP syntax checks, Phase 1 smoke tests and Phase 2 MySQL integration tests
+- GitHub Actions PHP syntax checks, smoke tests, MySQL integration tests, and authorization/context tests
 
-The webhook now requires a configured database and applied migrations. It stores valid Telegram updates once and records sender details when available. It still does not respond to /start or implement /post, collections, wallet, Premium, referrals or admin settings.
+The bot is still in development. The /settings view is read-only; admin editing, collection posting, dump-channel storage, deep links, wallet, Premium, referrals and auto-delete are not implemented yet.
 
 ## Requirements
 
@@ -54,21 +56,20 @@ Telegram webhook secret tokens should be 1–256 characters and use only letters
 1. Create a MySQL/MariaDB database and database user in cPanel.
 2. Grant that user privileges only on the bot database.
 3. Set DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD in the private configuration.
-4. Upload the project with database/, src/, and bin/ available outside the public web root where possible.
-5. Run the migration command from the hosting CLI: php bin/migrate.php.
-6. The command creates schema_migrations, users, and telegram_updates. Re-running it safely skips migrations already recorded.
-7. Only after the schema is created should the webhook be configured.
+4. Keep database/, src/, and bin/ outside the public web root where possible.
+5. Run `php bin/migrate.php` from the hosting CLI.
+6. The command creates `schema_migrations`, `users`, `telegram_updates`, and `bot_settings`. Re-running it skips migrations already recorded.
+7. Configure the webhook only after the schema exists.
 
-Migration note: MySQL DDL can auto-commit. The runner uses additive/idempotent initial table creation; inspect the database after a failed migration before retrying.
+MySQL DDL may auto-commit. If a migration fails partway, inspect the database before retrying.
 
 ## cPanel deployment notes
 
-1. Expose only the public directory as the website document root where your hosting layout permits, or adjust the webhook bootstrap path carefully if cPanel requires another layout.
+1. Expose only the `public` directory as the website document root where your hosting layout permits, or carefully adjust the webhook bootstrap path.
 2. Configure BOT_CONFIG_FILE to point to the private config file.
 3. Ensure PHP cURL and PDO MySQL are enabled and the domain has a valid HTTPS certificate.
-4. Run php bin/migrate.php and then php bin/set-webhook.php from CLI after configuration.
-5. Do not configure the production webhook until the database schema exists and the endpoint is reachable over HTTPS.
-6. The webhook currently persists updates but does not handle commands; the bot is not ready for public use yet.
+4. Run `php bin/migrate.php`, then `php bin/set-webhook.php` from CLI after configuration.
+5. The webhook stores updates and handles the currently implemented basic commands; it is not ready for public file delivery until collection, access control and operational retry handling are implemented.
 
 ## Development rules
 

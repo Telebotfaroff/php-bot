@@ -12,6 +12,7 @@ use App\Services\PostWizardService;
 use App\Services\PremiumService;
 use App\Services\ReferralService;
 use App\Services\WalletService;
+use App\Services\AdminFeatureService;
 
 final class UpdateRouter
 {
@@ -23,7 +24,8 @@ final class UpdateRouter
         private readonly CollectionDeliveryService $collectionDelivery,
         private readonly WalletService $wallet,
         private readonly PremiumService $premium,
-        private readonly ReferralService $referrals
+        private readonly ReferralService $referrals,
+        private readonly AdminFeatureService $adminFeatures
     ) {}
 
     /** @param array<string, mixed> $update */
@@ -107,6 +109,102 @@ final class UpdateRouter
         $rawCommand = is_array($parts) ? ($parts[0] ?? '') : '';
         $command = strtolower((string) preg_replace('/@\w+$/', '', $rawCommand));
         $argument = is_array($parts) ? trim((string) ($parts[1] ?? '')) : '';
+        
+        if (!$this->admin->isOwner($context->userId) && $this->adminFeatures->isBanned($context->userId)) {
+            $this->telegram->sendMessage($context->chatId, '⛔ Your access to this bot has been restricted. Contact the bot owner if you believe this is a mistake.');
+            return;
+        }
+
+        if ($command === '/search') {
+            if ($argument === '') {
+                $this->telegram->sendMessage($context->chatId, "🔎 Search published collections by title.\nUsage: /search KEYWORDS");
+                return;
+            }
+            try {
+                $results = $this->adminFeatures->searchCollections($context->userId, $argument);
+                if ($results === []) {
+                    $this->telegram->sendMessage($context->chatId, 'No published collections matched that search. Try different keywords.');
+                    return;
+                }
+                $username = trim((string) Config::get('BOT_USERNAME', ''));
+                if ($username === '') {
+                    $this->telegram->sendMessage($context->chatId, 'Search found results, but BOT_USERNAME is not configured. Please contact the owner.');
+                    return;
+                }
+                $lines = ['🔎 Search results (' . count($results) . '):', ''];
+                foreach ($results as $i => $result) {
+                    $title = preg_replace('/[\x00-\x1F\x7F]/u', '', (string) $result['title']) ?? (string) $result['title'];
+                    $lines[] = ($i + 1) . '. ' . $title . ' — ' . (int) $result['file_count'] . ' file(s)';
+                    $lines[] = 'https://t.me/' . ltrim($username, '@') . '?start=post_' . $result['code'];
+                    $lines[] = '';
+                }
+                $this->telegram->sendMessage($context->chatId, implode("\n", $lines));
+            } catch (\Throwable $e) {
+                $this->telegram->sendMessage($context->chatId, $e instanceof \RuntimeException ? $e->getMessage() : 'Search is temporarily unavailable.');
+            }
+            return;
+        }
+
+        if ($command === '/stats') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            try {
+                $stats = $this->adminFeatures->stats();
+                $this->telegram->sendMessage($context->chatId,
+                    "📊 Bot analytics\n\n"
+                    . "Users: " . $stats['users_total'] . "\n"
+                    . "Active in 24h: " . $stats['users_active_24h'] . "\n"
+                    . "Banned users: " . $stats['users_banned'] . "\n"
+                    . "Published collections: " . $stats['collections'] . "\n"
+                    . "Indexed files: " . $stats['files'] . "\n"
+                    . "Searches in 24h: " . $stats['searches_24h'] . "\n"
+                    . "Completed deliveries in 24h: " . $stats['deliveries_24h'] . "\n"
+                    . "Pending update jobs: " . $stats['pending_jobs']);
+            } catch (\Throwable) {
+                $this->telegram->sendMessage($context->chatId, 'Analytics are temporarily unavailable. Check that the latest database migrations have run.');
+            }
+            return;
+        }
+
+        if ($command === '/user') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            if (!ctype_digit($argument) || (int) $argument < 1) {
+                $this->telegram->sendMessage($context->chatId, 'Usage: /user TELEGRAM_USER_ID');
+                return;
+            }
+            $user = $this->adminFeatures->user((int) $argument);
+            if ($user === null) {
+                $this->telegram->sendMessage($context->chatId, 'No user record found. The user must have interacted with the bot first.');
+                return;
+            }
+            $this->telegram->sendMessage($context->chatId,
+                "👤 User profile\nID: " . $user['telegram_user_id']
+                . "\nName: " . trim((string) $user['first_name'] . ' ' . (string) $user['last_name'])
+                . "\nUsername: " . ((string) ($user['username'] ?? '') !== '' ? '@' . $user['username'] : 'not set')
+                . "\nWallet: " . $user['balance'] . " coins"
+                . "\nStatus: " . ((int) $user['is_banned'] === 1 ? 'BANNED' : 'active')
+                . "\nJoined: " . $user['created_at']
+                . "\nLast seen: " . $user['last_seen_at']
+                . ((string) ($user['ban_reason'] ?? '') !== '' ? "\nBan reason: " . $user['ban_reason'] : ''));
+            return;
+        }
+
+        if ($command === '/ban' || $command === '/unban') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            $fields = preg_split('/\s+/', $argument, 2);
+            if (!is_array($fields) || !ctype_digit((string) ($fields[0] ?? '')) || (int) $fields[0] < 1) {
+                $this->telegram->sendMessage($context->chatId, 'Usage: /ban USER_ID [REASON] or /unban USER_ID');
+                return;
+            }
+            $targetId = (int) $fields[0];
+            try {
+                $done = $this->adminFeatures->setBanned($targetId, $context->userId, $command === '/ban', (string) ($fields[1] ?? ''));
+                $this->telegram->sendMessage($context->chatId, !$done ? 'User not found.' : ($command === '/ban' ? '⛔ User ' . $targetId . ' has been banned.' : '✅ User ' . $targetId . ' has been unbanned.'));
+            } catch (\Throwable $e) {
+                $this->telegram->sendMessage($context->chatId, $e->getMessage());
+            }
+            return;
+        }
+
 
         $promoPendingKey = 'admin_pending_promo_create_' . $context->userId;
         if ((string) $this->settings->get($promoPendingKey, '') === '1' && $context->text !== null && !str_starts_with(trim($context->text), '/')) {
@@ -350,7 +448,7 @@ final class UpdateRouter
         if ($command === '/help') {
             $this->telegram->sendMessage(
                 $context->chatId,
-                "Available commands:\n/start — Start the bot\n/referral — Get your referral link and stats\n/balance — Check your wallet\n/help — Show help\n/id — Show your Telegram user ID\n/post — Start an admin collection draft\n/done — Preview videos collected in the current draft\n/cancel — Cancel the current action or draft\n/skip — Skip optional thumbnail\n/setting — Open the owner-only Admin Panel"
+                "Available commands:\n/start — Start the bot\n/search KEYWORDS — Search collections\n/referral — Get your referral link and stats\n/balance — Check your wallet\n/help — Show help\n/id — Show your Telegram user ID\n/post — Start an admin collection draft\n/done — Preview videos collected in the current draft\n/cancel — Cancel the current action or draft\n/skip — Skip optional thumbnail\n/setting — Open the owner-only Admin Panel\nOwner: /stats, /user ID, /ban ID [reason], /unban ID"
             );
             return;
         }

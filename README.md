@@ -121,3 +121,20 @@ Important: GPLinks' published terms prohibit incentivized clicks. Therefore this
 - Each qualified referral grants the referrer 24 hours of Premium. Active paid/referral Premium is extended; an existing lifetime Premium subscription is not shortened.
 - Configure `BOT_USERNAME` in the private environment/config file. Apply database migration 008 before deploying this version.
 - Referral rewards are transactionally recorded and unique per referred user. This phase does not yet include configurable referral enable/disable settings or advanced anti-abuse signals.
+
+
+## Automatic deletion queue (cPanel cron)
+
+The bot records each successfully delivered collection message in `delivery_outgoing_messages`. The auto-delete worker processes those records in bounded batches, retries failures, stops retrying a message after 12 attempts, and uses a MySQL advisory lock to avoid overlapping cron runs.
+
+1. Apply migration `009_add_auto_delete_tracking.php` (the migration runner applies it with the others).
+2. Enable deletion as owner:
+   - `/setting set auto_delete_enabled true`
+   - `/setting set auto_delete_after_seconds 86400` (24 hours; minimum 60 seconds)
+3. Add a cPanel cron job to run every 5 minutes, using your actual account paths:
+
+```cron
+*/5 * * * * /usr/local/bin/php /home/CPANEL_USER/path-to-php-bot/bin/auto-delete-messages.php >> /home/CPANEL_USER/logs/auto-delete.log 2>&1
+```
+
+Use the PHP CLI path shown by your cPanel hosting provider. Keep logs outside the public web root. Disable the feature with `/setting set auto_delete_enabled false`. The worker only deletes messages tracked from collection deliveries; it does not delete users' unrelated messages. Telegram may refuse deletion because of permissions or message-age limits; those failures are retried up to 12 times and logged.

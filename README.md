@@ -112,3 +112,12 @@ The repository now includes `public/shortener-callback.php` and `ShortenerCallba
 **This is a callback contract, not a finished provider integration.** A provider-specific adapter must authenticate the provider's actual server-to-server event and normalize it to this contract. Do not point a browser redirect or arbitrary third-party request at this endpoint. Get Coins remains disabled until a supported adapter and link-creation flow are configured.
 
 Important: GPLinks' published terms prohibit incentivized clicks. Therefore this bot must not offer coins in exchange for completing GPLinks links unless GPLinks gives explicit written permission or changes its terms. See [GPLinks terms](https://gplinks.com/pages/terms). Choose a provider that explicitly supports incentivized traffic and server-side completion verification before enabling rewards.
+
+
+## Referrals
+
+- Users can run `/referral` to get a personal `https://t.me/<bot_username>?start=ref_<telegram_user_id>` invite link and referral counts.
+- A referral qualifies only when a genuinely new bot user starts with that link. Existing users, self-referrals, unknown referrers and repeat attempts do not grant rewards.
+- Each qualified referral grants the referrer 24 hours of Premium. Active paid/referral Premium is extended; an existing lifetime Premium subscription is not shortened.
+- Configure `BOT_USERNAME` in the private environment/config file. Apply database migration 008 before deploying this version.
+- Referral rewards are transactionally recorded and unique per referred user. This phase does not yet include configurable referral enable/disable settings or advanced anti-abuse signals.

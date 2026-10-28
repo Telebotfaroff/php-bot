@@ -8,13 +8,14 @@ PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Teleg
 - Telegram webhook secret-token verification and Telegram Bot API client using PHP cURL/TLS
 - PDO MySQL/MariaDB connection factory using prepared statements
 - Versioned PHP migrations and schema for users, Telegram updates, and persistent bot settings
-- Durable Telegram update ID deduplication and sender profile upserts
+- Durable Telegram update ID deduplication, sender profile upserts, and a database-backed update outbox with retry backoff
+- CLI outbox worker (`bin/process-update-outbox.php`) for bounded cPanel cron retries
 - Owner-only authorization using configured BOT_OWNER_ID
 - Basic /start, /help, /id and owner-only read-only /settings commands
 - CLI-only database migration and webhook setup commands
 - GitHub Actions PHP syntax checks, smoke tests, MySQL integration tests, and authorization/context tests
 
-The bot is still in development. The /settings view is read-only; admin editing, collection posting, dump-channel storage, deep links, wallet, Premium, referrals and auto-delete are not implemented yet.
+The bot is still in development. The /settings view is read-only; admin editing, collection posting, dump-channel storage, deep links, wallet, Premium, referrals and auto-delete are not implemented yet. Webhook updates are stored in a durable outbox before dispatch. Failed dispatches are retried with backoff by the webhook or CLI worker.
 
 ## Requirements
 
@@ -58,7 +59,7 @@ Telegram webhook secret tokens should be 1–256 characters and use only letters
 3. Set DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD in the private configuration.
 4. Keep database/, src/, and bin/ outside the public web root where possible.
 5. Run `php bin/migrate.php` from the hosting CLI.
-6. The command creates `schema_migrations`, `users`, `telegram_updates`, and `bot_settings`. Re-running it skips migrations already recorded.
+6. The command creates `schema_migrations`, `users`, `telegram_updates`, `bot_settings`, and `telegram_update_jobs`. Re-running it skips migrations already recorded.
 7. Configure the webhook only after the schema exists.
 
 MySQL DDL may auto-commit. If a migration fails partway, inspect the database before retrying.
@@ -69,7 +70,7 @@ MySQL DDL may auto-commit. If a migration fails partway, inspect the database be
 2. Configure BOT_CONFIG_FILE to point to the private config file.
 3. Ensure PHP cURL and PDO MySQL are enabled and the domain has a valid HTTPS certificate.
 4. Run `php bin/migrate.php`, then `php bin/set-webhook.php` from CLI after configuration.
-5. The webhook stores updates and handles the currently implemented basic commands; it is not ready for public file delivery until collection, access control and operational retry handling are implemented.
+5. The webhook stores updates and handles the currently implemented basic commands; it is not ready for public file delivery until collection and access control are implemented. The outbox uses retry/backoff for failed dispatches; because Telegram's send methods do not provide a general idempotency key, a rare timeout after Telegram accepted a message can still lead to a duplicate reply on retry.
 
 ## Development rules
 

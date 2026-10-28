@@ -77,7 +77,8 @@ $updateQuery = $pdo->prepare('SELECT COUNT(*) FROM telegram_updates WHERE update
 $updateQuery->execute(['id' => $updateId]);
 check((int) $updateQuery->fetchColumn() === 1, 'keeps only one row per Telegram update');
 
-echo "
+echo PHP_EOL;
+
 $settings = new SettingsRepository($pdo);
 $wallet = new WalletService($pdo, $settings);
 $walletUser = random_int(900000000, 999999999);
@@ -103,4 +104,4 @@ check($wallet->creditVerifiedTask($task['token'], 'testprovider'), 'credits task
 check(!$wallet->creditVerifiedTask($task['token'], 'testprovider'), 'does not credit repeated verification callback');
 check($wallet->balance($walletUser) === 35, 'wallet balance reflects exactly one verified reward');
 
-Phase 2 database tests passed.\n";
+echo 'Phase 2 database tests passed.' . PHP_EOL;

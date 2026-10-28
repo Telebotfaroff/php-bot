@@ -167,7 +167,7 @@ final class WalletService
             $statement->bindValue('days', $expiryDays, PDO::PARAM_INT);
             $statement->bindValue('created_by', $createdBy, PDO::PARAM_INT);
             $statement->execute();
-        } catch (\\PDOException $exception) {
+        } catch (\PDOException $exception) {
             if ((string) $exception->getCode() === '23000') throw new RuntimeException('That promo code already exists.');
             throw $exception;
         }
@@ -243,7 +243,7 @@ final class WalletService
             $count->execute(['id' => (int) $promo['id']]);
             $this->pdo->commit();
             return ['status' => 'redeemed', 'coins' => $amount, 'balance' => $balance];
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();
             throw $exception;
         }

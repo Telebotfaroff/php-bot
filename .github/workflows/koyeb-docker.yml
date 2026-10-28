@@ -1,0 +1,22 @@
+name: Koyeb Docker build
+
+on:
+  push:
+    branches: [deploy/koyeb]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Build Koyeb image
+        run: docker build --tag php-bot-koyeb:test .
+      - name: Check image metadata
+        run: docker image inspect php-bot-koyeb:test --format '{{.Os}}/{{.Architecture}}'

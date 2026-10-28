@@ -82,8 +82,9 @@
 - Remaining: provider-specific shortener URL generation and authenticated server-side callback/API adapter. Until that is implemented, Get Coins remains a clear placeholder and no user action alone credits coins.
 - Exit: latest CI passes; then implement a documented provider adapter in Phase 9.
 
-### Phase 8 — Premium plans and manual subscriptions
-- Admin CRUD for plans and safe subscription expiry/extension.
+### Phase 8 — Premium plans and manual subscriptions (initial implementation committed; CI verification pending)
+- Added Premium plan creation/disable commands, user plan selection, UPI/crypto manual request creation, transaction-reference submission, owner-only pending review and approve/reject commands. Approval is transactional and idempotent; only approval creates or extends a Premium subscription.
+- Added plan and payment-request migrations plus integration tests. Remaining: test expiry edge cases and improve review UX/notifications after CI passes.
 - Users choose a plan, view admin-configured manual payment instructions, submit a transaction/reference and optional screenshot, and receive a pending request ID.
 - Admin reviews pending requests and explicitly approves or rejects them. Only an authorized approval grants Premium; user-submitted screenshots/references alone never activate a plan.
 - Record approver, decision time, plan/price snapshot, user-submitted reference and audit history. Prevent duplicate approvals from granting duplicate subscriptions.

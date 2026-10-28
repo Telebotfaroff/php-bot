@@ -41,11 +41,20 @@
 - Added a MySQL-backed GitHub Actions integration test for migration idempotency, update deduplication and sender persistence.
 - Exit: database migration and duplicate-update tests passed in the user's reported CI run; production migrations still must be applied to the target database.
 
-### Phase 3 — Admin authorization and initial command router (implemented; CI verification pending)
+### Phase 3 — Admin authorization and initial command router (implemented; user confirmed CI passed)
 - Added owner-only authorization from `BOT_OWNER_ID`, normalized update context, persistent settings repository, and a read-only `/settings` view that hides sensitive setting values.
 - Added `/start`, `/help`, `/id`, `/setting`, and `/settings` basic command handlers and a Phase 3 authorization/context test suite.
 - The settings view is read-only; CRUD editing and the full bot features are not implemented yet.
-- Exit: confirm the latest GitHub Actions run passes; then add editable, validated settings before building the `/post` wizard.
+- Exit: passed in the user's reported GitHub Actions run.
+
+
+### Reliability fix — Durable Telegram update outbox (implemented; CI verification pending)
+- Telegram webhook updates, sender profiles and serialized update payloads are committed atomically to `telegram_update_jobs` before attempting Bot API work.
+- The webhook acknowledges after durable storage, even if immediate dispatch fails. Duplicate update IDs can retry the pending job rather than being dropped as already processed.
+- Added row-lock claims, a 90-second lease, exponential retry backoff capped at one hour, and `bin/process-update-outbox.php` for bounded cPanel cron retries.
+- Apply the new migration and configure the cron worker every minute after CI passes.
+- Delivery is at-least-once, not exactly-once: a timeout after Telegram accepts a send can still cause a duplicate reply because Telegram send methods do not provide a general idempotency key.
+- Exit: verify the newest GitHub Actions run passes before deployment.
 
 ### Phase 4 — Collection posting wizard and dump storage
 - Implement draft state machine, thumbnail skip, title, multiple videos, bot-managed copying to dump channel, ordering, cancellation and recovery.

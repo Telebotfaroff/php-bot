@@ -56,13 +56,17 @@
 - Delivery is at-least-once, not exactly-once: a timeout after Telegram accepts a send can still cause a duplicate reply because Telegram send methods do not provide a general idempotency key.
 - Exit: verify the newest GitHub Actions run passes before deployment.
 
-### Phase 4 — Collection posting wizard and dump storage
-- Implement draft state machine, thumbnail skip, title, multiple videos, bot-managed copying to dump channel, ordering, cancellation and recovery.
-- Exit: interrupted drafts can resume/cancel; failed copies are recoverable; no accidental publication.
+### Phase 4 — Collection posting wizard and dump storage (implemented; CI verification pending)
+- Added persistent draft state, optional thumbnail, title, multiple videos, automatic `copyMessage` storage in the configured dump channel, ordered file references, cancellation, and resumable drafts.
+- Added preview and publish/cancel buttons. Drafts and ordered files are stored in MySQL; large media are not downloaded to cPanel disk.
+- Added `/setting set dump_channel_id CHANNEL_ID` and `/setting set post_channel_id CHANNEL_ID` for validated channel configuration.
+- Exit: verify the newest GitHub Actions run, then test on a private test bot and channels before production.
 
-### Phase 5 — Publishing and deep links
-- Preview draft, publish only after confirmation, create random collection code and publish to post channel.
-- Exit: published links resolve to the correct persistent collection.
+### Phase 5 — Publishing and deep links (initial publishing implemented; link delivery pending)
+- Added explicit publish confirmation, cryptographically random 32-character collection codes, collection/file persistence, and a post-channel message with an `https://t.me/<bot_username>?start=post_<code>` link.
+- Publishing records a stable collection ID before the external send and resumes a `publishing` draft after recoverable failures. A rare timeout after Telegram accepts the channel post can still duplicate that post on retry.
+- Opening a deep link does not yet deliver videos; that requires the access-check and delivery phase.
+- Exit: add deep-link resolution, access checks and ordered delivery in Phase 6.
 
 ### Phase 6 — Access checks and delivery
 - Implement force-subscription, active-Premium bypass, coin affordability checks and ordered batch delivery with retry tracking.

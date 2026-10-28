@@ -81,6 +81,54 @@ final class BotApiClient
         ], $options));
     }
 
+
+    public function sendDocument(int|string $chatId, string $path, string $filename, string $caption = ''): array
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new RuntimeException('Backup file is unavailable.');
+        }
+        if (!function_exists('curl_init')) {
+            throw new RuntimeException('PHP cURL extension is required for Telegram uploads.');
+        }
+
+        $curl = curl_init($this->apiBase . '/bot' . $this->token . '/sendDocument');
+        if ($curl === false) {
+            throw new RuntimeException('Could not initialize Telegram upload.');
+        }
+        $upload = new \CURLFile($path, 'application/json', basename($filename));
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => [
+                'chat_id' => (string) $chatId,
+                'caption' => $caption,
+                'document' => $upload,
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
+        $body = curl_exec($curl);
+        $curlError = curl_error($curl);
+        $httpStatus = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        if (!is_string($body)) {
+            throw new RuntimeException('Telegram upload transport failed: ' . $curlError);
+        }
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Telegram upload returned invalid JSON (HTTP ' . $httpStatus . ').');
+        }
+        if ($httpStatus < 200 || $httpStatus >= 300 || ($decoded['ok'] ?? false) !== true) {
+            $description = is_string($decoded['description'] ?? null) ? $decoded['description'] : 'Unknown Telegram API error';
+            $code = is_numeric($decoded['error_code'] ?? null) ? (int) $decoded['error_code'] : $httpStatus;
+            throw new BotApiException('Telegram upload failed: ' . $description, $code, $decoded);
+        }
+        return $decoded;
+    }
+
     public function answerCallbackQuery(string $callbackQueryId, array $options = []): array
     {
         return $this->call('answerCallbackQuery', array_merge([

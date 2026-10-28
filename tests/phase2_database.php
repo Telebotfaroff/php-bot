@@ -21,8 +21,11 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 1, 'applies the initial migration once');
+check(count($firstRun) === 2, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
+
+$settingsTable = $pdo->query('SHOW TABLES LIKE \'bot_settings\'')->fetchColumn();
+check($settingsTable === 'bot_settings', 'creates persistent bot settings table');
 
 $processor = new UpdateProcessor($pdo);
 $updateId = random_int(700000000, 799999999);

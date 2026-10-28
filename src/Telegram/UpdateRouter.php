@@ -664,7 +664,7 @@ final class UpdateRouter
             return $value;
         }
         if ($key === 'referral_reward_hours') {
-            if (!preg_match('/^[1-9][0-9]{0,2}$/', $value) || (int) $value > 720) throw new \\InvalidArgumentException('Enter a referral reward duration from 1 to 720 hours.');
+            if (!preg_match('/^[1-9][0-9]{0,2}$/', $value) || (int) $value > 720) throw new \InvalidArgumentException('Enter a referral reward duration from 1 to 720 hours.');
             return (string) (int) $value;
         }
         if ($key === 'shortener_provider_code') {

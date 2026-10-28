@@ -51,6 +51,37 @@ foreach ([
     check((int) $tableCheck->fetchColumn() === 1, 'creates ' . $table . ' table');
 }
 
+
+$backupService = new DatabaseBackupService($pdo);
+$settings->set('test_api_token', 'must-never-appear-in-backup');
+$backupPath = $backupService->createTemporaryBackup();
+try {
+    $backupPreview = $backupService->validateBackupFile($backupPath);
+    check($backupPreview['table_count'] > 0, 'backup dry-run validates known tables');
+    check($backupPreview['row_count'] >= 0, 'backup dry-run counts exported rows');
+    $backupJson = file_get_contents($backupPath);
+    check(is_string($backupJson) && !str_contains($backupJson, 'must-never-appear-in-backup'), 'backup excludes secret-like settings');
+    check(is_string($backupJson) && !str_contains($backupJson, 'test_api_token'), 'backup omits secret-like setting keys');
+} finally {
+    @unlink($backupPath);
+}
+$badBackupPath = tempnam(sys_get_temp_dir(), 'php-bot-bad-backup-');
+if ($badBackupPath === false) {
+    throw new RuntimeException('Could not create invalid backup test file.');
+}
+try {
+    file_put_contents($badBackupPath, '{"format":"wrong","format_version":99,"tables":[]}');
+    $rejected = false;
+    try {
+        $backupService->validateBackupFile($badBackupPath);
+    } catch (RuntimeException) {
+        $rejected = true;
+    }
+    check($rejected, 'backup dry-run rejects unsupported format without modifying data');
+} finally {
+    @unlink($badBackupPath);
+}
+
 $processor = new UpdateProcessor($pdo);
 $updateId = random_int(700000000, 799999999);
 $userId = random_int(800000000, 899999999);

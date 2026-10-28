@@ -182,7 +182,7 @@ final class CollectionDeliveryService
     {
         $statement = $this->pdo->prepare(
             "SELECT i.id AS item_id, i.sequence_no, i.status AS item_status,
-                    f.dump_chat_id, f.dump_message_id
+                    f.dump_chat_id, f.dump_message_id, f.source_file_id, f.media_kind
              FROM collection_delivery_items i
              INNER JOIN collection_files f ON f.id = i.collection_file_id
              WHERE i.job_id = :job ORDER BY i.sequence_no ASC"
@@ -190,58 +190,125 @@ final class CollectionDeliveryService
         $statement->execute(['job' => $jobId]);
         $items = $statement->fetchAll();
         $delivered = 0;
+        $total = count($items);
+        $index = 0;
 
         try {
-            foreach ($items as $item) {
-                if ($item['item_status'] === 'delivered') {
+            while ($index < $total) {
+                if ($items[$index]['item_status'] === 'delivered') {
                     $delivered++;
+                    $index++;
                     continue;
                 }
 
-                $attempt = $this->pdo->prepare('UPDATE collection_delivery_items SET attempts = attempts + 1 WHERE id = :id');
-                $attempt->execute(['id' => (int) $item['item_id']]);
+                // Preserve order, keep albums to at most 10 items, and never mix
+                // Telegram media types inside one album.
+                $group = [$items[$index]];
+                $kind = (string) $items[$index]['media_kind'];
+                $next = $index + 1;
+                while ($next < $total && count($group) < 10
+                    && $items[$next]['item_status'] !== 'delivered'
+                    && (string) $items[$next]['media_kind'] === $kind) {
+                    $group[] = $items[$next];
+                    $next++;
+                }
+
+                foreach ($group as $item) {
+                    $attempt = $this->pdo->prepare(
+                        'UPDATE collection_delivery_items SET attempts = attempts + 1 WHERE id = :id'
+                    );
+                    $attempt->execute(['id' => (int) $item['item_id']]);
+                }
 
                 try {
-                    $result = $this->telegram->call('copyMessage', [
-                        'chat_id' => $chatId,
-                        'from_chat_id' => $item['dump_chat_id'],
-                        'message_id' => (int) $item['dump_message_id'],
-                    ]);
-                    $messageId = filter_var($result['result']['message_id'] ?? null, FILTER_VALIDATE_INT);
-                    if ($messageId === false || $messageId === null) {
-                        throw new RuntimeException('Telegram did not return a delivered message ID.');
+                    if (count($group) >= 2) {
+                        $media = [];
+                        foreach ($group as $item) {
+                            $media[] = [
+                                'type' => $kind === 'document' ? 'document' : 'video',
+                                'media' => (string) $item['source_file_id'],
+                            ];
+                        }
+                        $response = $this->telegram->call('sendMediaGroup', [
+                            'chat_id' => $chatId,
+                            'media' => $media,
+                        ]);
+                        $results = $response['result'] ?? null;
+                        if (!is_array($results) || count($results) !== count($group)) {
+                            throw new RuntimeException('Telegram returned an unexpected media-group result.');
+                        }
+                    } else {
+                        $item = $group[0];
+                        $response = $this->telegram->call('copyMessage', [
+                            'chat_id' => $chatId,
+                            'from_chat_id' => $item['dump_chat_id'],
+                            'message_id' => (int) $item['dump_message_id'],
+                        ]);
+                        $results = [$response['result'] ?? null];
                     }
 
+                    // Persist the complete batch together so a normal retry resumes
+                    // from the next undelivered item instead of resending known successes.
                     $this->pdo->beginTransaction();
-                    $mark = $this->pdo->prepare(
-                        "UPDATE collection_delivery_items SET status = 'delivered', delivered_message_id = :message,
-                         delivered_chat_id = :chat, delivered_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = :id"
+                    foreach ($group as $offset => $item) {
+                        $message = $results[$offset] ?? null;
+                        $messageId = is_array($message)
+                            ? filter_var($message['message_id'] ?? null, FILTER_VALIDATE_INT) : false;
+                        if ($messageId === false || $messageId === null) {
+                            throw new RuntimeException('Telegram did not return a delivered message ID.');
+                        }
+                        $mark = $this->pdo->prepare(
+                            "UPDATE collection_delivery_items SET status = 'delivered',
+                             delivered_message_id = :message, delivered_chat_id = :chat,
+                             delivered_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = :id"
+                        );
+                        $mark->execute([
+                            'message' => $messageId, 'chat' => $chatId, 'id' => (int) $item['item_id'],
+                        ]);
+                        $outgoing = $this->pdo->prepare(
+                            "INSERT IGNORE INTO delivery_outgoing_messages
+                             (job_id, telegram_user_id, chat_id, message_id, category)
+                             VALUES (:job, :user, :chat, :message, 'collection_video')"
+                        );
+                        $outgoing->execute([
+                            'job' => $jobId, 'user' => $userId, 'chat' => $chatId, 'message' => $messageId,
+                        ]);
+                    }
+                    $progress = $this->pdo->prepare(
+                        "UPDATE collection_delivery_jobs SET delivered_files = delivered_files + :count WHERE id = :job"
                     );
-                    $mark->execute(['message' => $messageId, 'chat' => $chatId, 'id' => (int) $item['item_id']]);
-                    $outgoing = $this->pdo->prepare(
-                        "INSERT IGNORE INTO delivery_outgoing_messages
-                         (job_id, telegram_user_id, chat_id, message_id, category)
-                         VALUES (:job, :user, :chat, :message, 'collection_video')"
-                    );
-                    $outgoing->execute(['job' => $jobId, 'user' => $userId, 'chat' => $chatId, 'message' => $messageId]);
-                    $progress = $this->pdo->prepare('UPDATE collection_delivery_jobs SET delivered_files = delivered_files + 1 WHERE id = :job');
-                    $progress->execute(['job' => $jobId]);
+                    $progress->execute(['count' => count($group), 'job' => $jobId]);
                     $this->pdo->commit();
-                    $delivered++;
+                    $delivered += count($group);
+                    $index += count($group);
                 } catch (Throwable $exception) {
                     if ($this->pdo->inTransaction()) $this->pdo->rollBack();
-                    $markFailed = $this->pdo->prepare("UPDATE collection_delivery_items SET status = 'failed', last_error = :error WHERE id = :id");
-                    $markFailed->execute(['error' => substr($exception->getMessage(), 0, 500), 'id' => (int) $item['item_id']]);
+                    $markFailed = $this->pdo->prepare(
+                        "UPDATE collection_delivery_items SET status = 'failed', last_error = :error
+                         WHERE id = :id AND status <> 'delivered'"
+                    );
+                    foreach ($group as $item) {
+                        $markFailed->execute([
+                            'error' => substr($exception->getMessage(), 0, 500),
+                            'id' => (int) $item['item_id'],
+                        ]);
+                    }
                     throw $exception;
                 }
             }
 
-            $finish = $this->pdo->prepare("UPDATE collection_delivery_jobs SET status = 'completed', delivered_files = :count, last_error = NULL WHERE id = :id");
+            $finish = $this->pdo->prepare(
+                "UPDATE collection_delivery_jobs SET status = 'completed', delivered_files = :count, last_error = NULL WHERE id = :id"
+            );
             $finish->execute(['count' => $delivered, 'id' => $jobId]);
             $this->telegram->sendMessage($chatId, '✅ Collection delivery complete: ' . $title . "\nVideos delivered: " . $delivered);
         } catch (Throwable $exception) {
-            $fail = $this->pdo->prepare("UPDATE collection_delivery_jobs SET status = 'failed', delivered_files = :count, last_error = :error WHERE id = :id");
-            $fail->execute(['count' => $delivered, 'error' => substr($exception->getMessage(), 0, 500), 'id' => $jobId]);
+            $fail = $this->pdo->prepare(
+                "UPDATE collection_delivery_jobs SET status = 'failed', delivered_files = :count, last_error = :error WHERE id = :id"
+            );
+            $fail->execute([
+                'count' => $delivered, 'error' => substr($exception->getMessage(), 0, 500), 'id' => $jobId,
+            ]);
             $this->telegram->sendMessage($chatId,
                 '⚠️ Delivery paused after ' . $delivered . ' video(s). Progress is saved. Open the same collection link again to retry the remaining videos.');
         }

@@ -103,3 +103,12 @@ Telegram's send methods do not provide a general idempotency key. If Telegram ac
 - Create plans with `/premium_plan_add NAME|DAYS|PRICE|CURRENCY`; disable a plan with `/premium_plan_disable PLAN_ID`.
 - Configure instructions with `/setting set premium_upi_instructions YOUR_UPI_ID_AND_PAYMENT_STEPS` and `/setting set premium_crypto_instructions NETWORK_AND_WALLET_ADDRESS`. Keep real payment details private and never commit them to source control.
 - Apply database migrations after deploying. Only the configured bot owner can create/disable plans or review payment requests.
+
+
+## Signed shortener callback foundation
+
+The repository now includes `public/shortener-callback.php` and `ShortenerCallbackVerifier`. A normalized callback must POST `provider_code` and the one-time task `token`, with `X-Shortener-Timestamp` and `X-Shortener-Signature` headers. The signature is lowercase/uppercase hex HMAC-SHA256 over `TIMESTAMP.PROVIDER_CODE.TOKEN` using `SHORTENER_CALLBACK_SECRET`; timestamps outside five minutes are rejected. Use a separate random secret of at least 32 characters. Successful events are credited through the existing transactional/idempotent wallet ledger.
+
+**This is a callback contract, not a finished provider integration.** A provider-specific adapter must authenticate the provider's actual server-to-server event and normalize it to this contract. Do not point a browser redirect or arbitrary third-party request at this endpoint. Get Coins remains disabled until a supported adapter and link-creation flow are configured.
+
+Important: GPLinks' published terms prohibit incentivized clicks. Therefore this bot must not offer coins in exchange for completing GPLinks links unless GPLinks gives explicit written permission or changes its terms. See [GPLinks terms](https://gplinks.com/pages/terms). Choose a provider that explicitly supports incentivized traffic and server-side completion verification before enabling rewards.

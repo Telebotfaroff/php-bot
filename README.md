@@ -94,3 +94,12 @@ Telegram's send methods do not provide a general idempotency key. If Telegram ac
 - Keep secrets out of Git and redact them from logs.
 - Premium bypasses coin charges; it is not a coin package.
 - Premium purchases use manual UPI or cryptocurrency instructions and explicit admin approval; no payment gateway is integrated.
+
+
+## Premium plans and manual payments
+
+- Users can run `/premium` to choose an enabled plan and UPI or crypto, then submit a transaction reference using `/payref REQUEST_ID TRANSACTION_REFERENCE`.
+- The bot never activates Premium from a screenshot or reference alone. The owner verifies payment externally, reviews `/premium_pending`, and uses `/premium_approve REQUEST_ID` or `/premium_reject REQUEST_ID`.
+- Create plans with `/premium_plan_add NAME|DAYS|PRICE|CURRENCY`; disable a plan with `/premium_plan_disable PLAN_ID`.
+- Configure instructions with `/setting set premium_upi_instructions YOUR_UPI_ID_AND_PAYMENT_STEPS` and `/setting set premium_crypto_instructions NETWORK_AND_WALLET_ADDRESS`. Keep real payment details private and never commit them to source control.
+- Apply database migrations after deploying. Only the configured bot owner can create/disable plans or review payment requests.

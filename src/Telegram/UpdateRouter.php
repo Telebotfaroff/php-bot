@@ -116,8 +116,8 @@ final class UpdateRouter
                 return;
             }
             $fields = preg_split('/\s+/', trim($context->text));
-            if (!is_array($fields) || count($fields) !== 4) {
-                $this->telegram->sendMessage($context->chatId, "Format: CODE COINS MAX_USERS EXPIRY_DAYS\nExample: SUMMER50 50 100 2\nSend /cancel to cancel.");
+            if (!is_array($fields) || count($fields) !== 4 || !ctype_digit((string) ($fields[1] ?? '')) || !ctype_digit((string) ($fields[2] ?? '')) || !ctype_digit((string) ($fields[3] ?? ''))) {
+                $this->telegram->sendMessage($context->chatId, "Format: CODE COINS MAX_USERS EXPIRY_DAYS\nExample: SUMMER50 50 100 2\nUse whole numbers only. Send /cancel to cancel.");
                 return;
             }
             try {

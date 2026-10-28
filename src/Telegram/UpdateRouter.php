@@ -370,7 +370,7 @@ final class UpdateRouter
         if ($context->text !== null && preg_match('/^[A-Za-z0-9_-]{3,32}$/', trim($context->text))) {
             $result = $this->wallet->redeemPromoCode($context->userId, trim($context->text));
             if ($result['status'] === 'redeemed') {
-                $this->telegram->sendMessage($context->chatId, '🎉 Promo code accepted! You received ' . $result['coins'] . ' coins.\nWallet balance: ' . $result['balance'] . ' coins.');
+                $this->telegram->sendMessage($context->chatId, "🎉 Promo code accepted! You received " . $result['coins'] . " coins.\nWallet balance: " . $result['balance'] . " coins.");
                 return;
             }
             if ($result['status'] === 'already_used') {

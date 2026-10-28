@@ -57,3 +57,6 @@ jobs:
 
       - name: Run Phase 2 database tests
         run: php tests/phase2_database.php
+
+      - name: Run Phase 3 authorization tests
+        run: php tests/phase3_security.php

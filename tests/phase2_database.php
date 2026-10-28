@@ -9,6 +9,7 @@ use App\Database\SettingsRepository;
 use App\Services\WalletService;
 use App\Services\PremiumService;
 use App\Services\ReferralService;
+use App\Services\AdminFeatureService;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
 

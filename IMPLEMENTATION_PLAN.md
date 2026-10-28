@@ -102,8 +102,12 @@
 - Attribution, qualification event, fraud guards and auditable 24-hour Premium reward.
 - Exit: self-referral, repeat referral and duplicate event tests pass.
 
-### Phase 11 — Deletion and background jobs
-- Bounded cron workers, locking, retries, job status and deletion schedule processing.
+### Phase 11 — Deletion and background jobs (initial auto-delete implementation committed; CI verification pending)
+- Added migration 009 to track auto-delete attempts and last errors for delivered collection messages.
+- Added `AutoDeleteService` and CLI worker `bin/auto-delete-messages.php`; it processes bounded batches, uses a MySQL advisory lock, retries failures up to 12 attempts and logs failures.
+- Owner settings: `auto_delete_enabled` and `auto_delete_after_seconds` (60 seconds to 365 days). README documents a cPanel cron example.
+- Updated the outbox worker to inject the referral service required by the current router.
+- Remaining: verify CI, exercise with a test bot/channel, and confirm the host's PHP CLI path and Telegram delete permissions.
 - Exit: overlapping cron runs do not duplicate work; failures are visible and retryable.
 
 ### Phase 12 — Manual payment administration

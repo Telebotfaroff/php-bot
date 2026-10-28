@@ -9,7 +9,7 @@ RUN apt-get update \
     && sed -i 's/Listen 80/Listen 8080/' /etc/apache2/ports.conf \
     && sed -i 's/<VirtualHost \*:80>/<VirtualHost *:8080>/' /etc/apache2/sites-available/000-default.conf \
     && sed -i "s#DocumentRoot /var/www/html#DocumentRoot ${APACHE_DOCUMENT_ROOT}#" /etc/apache2/sites-available/000-default.conf \
-    && printf '\n<Directory /var/www/html/public>\n    Options -Indexes +FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>\n<Files \"install.php\">\n    Require all denied\n</Files>\n' >> /etc/apache2/apache2.conf \
+    && printf '\n<Directory /var/www/html/public>\n    Options -Indexes +FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>\n<Files \\"install.php\\">\n    Require all denied\n</Files>\n' >> /etc/apache2/apache2.conf \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html
@@ -23,4 +23,4 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 EXPOSE 8080
 
-CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/bin/sh", "/var/www/html/docker/entrypoint.sh"]

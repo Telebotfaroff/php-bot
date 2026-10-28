@@ -145,6 +145,37 @@ final class UpdateRouter
             return;
         }
 
+
+        if ($command === '/backup') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            $message = $update['message'] ?? [];
+            $chatType = is_array($message) && is_array($message['chat'] ?? null)
+                ? (string) ($message['chat']['type'] ?? '') : '';
+            if ($chatType !== 'private' || (string) $context->chatId !== (string) $context->userId) {
+                $this->telegram->sendMessage($context->chatId, 'For safety, run /backup in a private chat with the bot.');
+                return;
+            }
+
+            $path = null;
+            try {
+                $path = (new DatabaseBackupService(Connection::make()))->createTemporaryBackup();
+                $filename = 'php-bot-backup-' . gmdate('Ymd-His') . '.json';
+                $this->telegram->sendDocument(
+                    $context->chatId,
+                    $path,
+                    $filename,
+                    '🔐 Logical backup created. Sensitive bot settings are excluded. Store this file privately.'
+                );
+            } catch (\\Throwable $exception) {
+                $this->telegram->sendMessage($context->chatId, 'Backup failed safely. Check the private application logs and database size/configuration.');
+            } finally {
+                if (is_string($path) && is_file($path)) {
+                    @unlink($path);
+                }
+            }
+            return;
+        }
+
         if ($command === '/stats') {
             if (!$this->requireOwner($context->userId, $context->chatId)) return;
             try {

@@ -13,7 +13,7 @@
 2. The bot copies videos to the configured dump channel itself; the admin must not manually upload them to the dump channel. Persist Telegram file identifiers and ordering. Do not bulk-scan historical channel posts in v1.
 3. Publish a title/thumbnail and deep link to the configured post channel. Links use cryptographically random, unguessable codes and remain valid as long as the collection record exists.
 4. Opening a collection delivers every video in its original order. Split delivery into Telegram media groups of at most 10 items; track batches and retry safely to avoid blind duplicate sends.
-5. Admin `/Settings` controls dump, post and force-subscription channels; message deletion timers; welcome coins; collection access cost; shortener settings; referral rules; Premium plans; and manual-payment instructions.
+5. Admin `/Settings` controls dump, post and force-subscription channels; message deletion timers; welcome coins; collection access cost; shortener settings; referral rules; Premium plans; and manual-payment instructions for UPI and cryptocurrency.
 6. Force-subscription check uses Telegram's membership API and fails safely when membership cannot be verified.
 7. Wallet: configurable one-time welcome credit; integer coin amounts; append-only ledger; atomic, idempotent debits/credits. Insufficient funds never cause a debit and show Get Coins plus View Premium Plans.
 8. Get Coins: create a unique verification task and credit only after a provider-supported, server-to-server callback/API confirms completion. Validate signatures/tokens and make rewards idempotent. A click or browser return alone is not proof.
@@ -105,14 +105,15 @@
 - Existing code and conventions:
 - Hosting assumptions to verify:
 - Architecture decisions:
-- Open decisions (shortener provider, manual-payment instructions/methods, actual cPanel PHP/cron/outbound HTTPS support):
+- Open decisions (shortener provider, UPI/crypto manual-payment instructions, actual cPanel PHP/cron/outbound HTTPS support):
 - Phase 0 exit status:
 
 
 ## Manual payment policy (confirmed)
+- Supported manual payment methods: UPI and cryptocurrency. Admin can configure instructions for each method (for example, UPI ID/QR instructions and the supported crypto network/address); never hard-code the user's actual addresses into source code.
 - The project will not integrate a payment gateway/provider.
 - Premium purchases are handled manually by an administrator.
-- The bot displays payment instructions configured by the admin, records a user's plan selection and submitted transaction reference, and marks the request pending.
+- The bot lets the user choose UPI or cryptocurrency and displays the corresponding instructions configured by the admin, records a user's plan selection and submitted transaction reference, and marks the request pending.
 - An authorized admin verifies the payment outside the bot and approves or rejects the request inside the bot.
 - Only the approval action activates Premium. Never activate Premium merely because the user sends a screenshot, transaction ID, or claims payment succeeded.
 - Approval must be transactional and idempotent, with an audit record and a snapshot of the requested plan and price.

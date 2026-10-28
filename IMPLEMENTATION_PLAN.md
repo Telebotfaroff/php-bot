@@ -5,7 +5,7 @@
 - Database: MySQL/MariaDB using PDO and prepared statements.
 - Telegram integration: HTTPS webhook for updates; bounded cPanel cron jobs for retries and scheduled tasks.
 - Do not require Redis, MongoDB, Docker, root access, or a permanently running daemon.
-- Keep secrets in environment/config outside version control. Never commit real bot tokens, database passwords, webhook secrets, or payment credentials.
+- Keep secrets in environment/config outside version control. Never commit real bot tokens, database passwords, webhook secrets, or provider credentials.
 - Build incrementally. Complete and review one phase before starting the next.
 
 ## Product requirements
@@ -13,7 +13,7 @@
 2. The bot copies videos to the configured dump channel itself; the admin must not manually upload them to the dump channel. Persist Telegram file identifiers and ordering. Do not bulk-scan historical channel posts in v1.
 3. Publish a title/thumbnail and deep link to the configured post channel. Links use cryptographically random, unguessable codes and remain valid as long as the collection record exists.
 4. Opening a collection delivers every video in its original order. Split delivery into Telegram media groups of at most 10 items; track batches and retry safely to avoid blind duplicate sends.
-5. Admin `/Settings` controls dump, post and force-subscription channels; message deletion timers; welcome coins; collection access cost; shortener settings; referral rules; and Premium plans.
+5. Admin `/Settings` controls dump, post and force-subscription channels; message deletion timers; welcome coins; collection access cost; shortener settings; referral rules; Premium plans; and manual-payment instructions.
 6. Force-subscription check uses Telegram's membership API and fails safely when membership cannot be verified.
 7. Wallet: configurable one-time welcome credit; integer coin amounts; append-only ledger; atomic, idempotent debits/credits. Insufficient funds never cause a debit and show Get Coins plus View Premium Plans.
 8. Get Coins: create a unique verification task and credit only after a provider-supported, server-to-server callback/API confirms completion. Validate signatures/tokens and make rewards idempotent. A click or browser return alone is not proof.
@@ -60,10 +60,13 @@
 - Implement ledger, welcome reward, atomic debit/credit, insufficient-balance UI and verification-task records.
 - Exit: concurrency/idempotency tests pass; unverified tasks never credit coins.
 
-### Phase 8 — Premium plans and subscriptions
+### Phase 8 — Premium plans and manual subscriptions
 - Admin CRUD for plans and safe subscription expiry/extension.
-- Integrate payment only after payment provider and webhook contract are chosen.
-- Exit: active Premium bypasses coins; expiry restores normal rules.
+- Users choose a plan, view admin-configured manual payment instructions, submit a transaction/reference and optional screenshot, and receive a pending request ID.
+- Admin reviews pending requests and explicitly approves or rejects them. Only an authorized approval grants Premium; user-submitted screenshots/references alone never activate a plan.
+- Record approver, decision time, plan/price snapshot, user-submitted reference and audit history. Prevent duplicate approvals from granting duplicate subscriptions.
+- No payment gateway, payment-provider webhook, or automatic payment verification is required.
+- Exit: active Premium bypasses coins; expiry restores normal rules; pending requests never grant access.
 
 ### Phase 9 — Shortener provider integration
 - Implement one documented provider adapter at a time with server-side verification, replay protection and provider failure handling.
@@ -77,9 +80,11 @@
 - Bounded cron workers, locking, retries, job status and deletion schedule processing.
 - Exit: overlapping cron runs do not duplicate work; failures are visible and retryable.
 
-### Phase 12 — Optional payments
-- Add a payment provider only after explicit provider selection and verified webhook documentation.
-- Exit: no subscription is granted from an unverified client redirect.
+### Phase 12 — Manual payment administration
+- Add admin review commands/buttons for pending Premium purchase requests, including approve/reject and an optional admin note.
+- Make decisions idempotent, auditable and restricted to authorized admins.
+- Configure payment instructions in `/Settings`; do not store or request users' banking passwords, OTPs, card PINs or other payment secrets.
+- Exit: only explicit admin approval grants a subscription, and repeated callbacks/actions cannot grant duplicate time.
 
 ### Phase 13 — Hardening and deployment
 - Unit/integration tests, rate limits, privacy-safe logs, backup/restore notes, cPanel cron setup, webhook setup and troubleshooting.
@@ -88,7 +93,7 @@
 ## Required test coverage
 - Collections containing 1, 2, 10, 11 and 23 videos.
 - Ordering, optional thumbnail, draft interruption and copy failure.
-- Duplicate webhook updates, callbacks and shortener reward events.
+- Duplicate webhook updates, shortener reward events and manual-payment approval actions.
 - Concurrent wallet debits, insufficient balance and no negative balances.
 - Active Premium bypass, expiry, and no coin debit while Premium is active.
 - Referral self-attribution and duplicate qualification.
@@ -100,5 +105,14 @@
 - Existing code and conventions:
 - Hosting assumptions to verify:
 - Architecture decisions:
-- Open decisions (shortener provider, payment provider, actual cPanel PHP/cron/outbound HTTPS support):
+- Open decisions (shortener provider, manual-payment instructions/methods, actual cPanel PHP/cron/outbound HTTPS support):
 - Phase 0 exit status:
+
+
+## Manual payment policy (confirmed)
+- The project will not integrate a payment gateway/provider.
+- Premium purchases are handled manually by an administrator.
+- The bot displays payment instructions configured by the admin, records a user's plan selection and submitted transaction reference, and marks the request pending.
+- An authorized admin verifies the payment outside the bot and approves or rejects the request inside the bot.
+- Only the approval action activates Premium. Never activate Premium merely because the user sends a screenshot, transaction ID, or claims payment succeeded.
+- Approval must be transactional and idempotent, with an audit record and a snapshot of the requested plan and price.

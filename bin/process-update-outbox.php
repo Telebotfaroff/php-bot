@@ -9,6 +9,7 @@ use App\Security\AdminAuthorizer;
 use App\Telegram\BotApiClient;
 use App\Telegram\UpdateRouter;
 use App\Support\Logger;
+use App\Services\CollectionDeliveryService;
 use App\Services\PostWizardService;
 
 if (PHP_SAPI !== 'cli') {
@@ -23,7 +24,8 @@ try {
     $telegram = new BotApiClient();
     $settings = new SettingsRepository($pdo);
     $wizard = new PostWizardService($pdo, $telegram, $settings);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard);
+    $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery);
     $completed = (new UpdateOutbox($pdo, $router))->dispatchDue(25);
     fwrite(STDOUT, 'Outbox jobs completed: ' . $completed . PHP_EOL);
 } catch (Throwable $exception) {

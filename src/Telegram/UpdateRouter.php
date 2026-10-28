@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Telegram;
 
-use App\Config\Config;
 use App\Database\SettingsRepository;
 use App\Security\AdminAuthorizer;
-use Throwable;
 
 final class UpdateRouter
 {
@@ -25,7 +23,9 @@ final class UpdateRouter
 
         if ($context->isCallback) {
             if ($context->callbackId !== null) {
-                $this->telegram->answerCallbackQuery($context->callbackId, 'This action is not available yet.');
+                $this->telegram->answerCallbackQuery($context->callbackId, [
+                    'text' => 'This action is not available yet.',
+                ]);
             }
             return;
         }
@@ -34,17 +34,28 @@ final class UpdateRouter
             return;
         }
 
-        $text = trim($context->text);
-        $command = strtolower((string) preg_replace('/@\w+$/', '', strtok($text, " \t\r\n") ?: ''));
+        $parts = preg_split('/\s+/', trim($context->text), 2);
+        $rawCommand = is_array($parts) ? ($parts[0] ?? '') : '';
+        $command = strtolower((string) preg_replace('/@\w+$/', '', $rawCommand));
 
         if ($command === '/start') {
-            $name = trim((string) preg_replace('/[\x00-\x1F\x7F]/u', '', (string) ($update['message']['from']['first_name'] ?? 'there')));
+            $name = $update['message']['from']['first_name'] ?? 'there';
+            $name = is_string($name) ? preg_replace('/[\x00-\x1F\x7F]/u', '', $name) : 'there';
+            $name = trim(is_string($name) ? $name : 'there');
             if ($name === '') {
                 $name = 'there';
             }
             $this->telegram->sendMessage(
                 $context->chatId,
-                "Hey " . $name . "! 👋\n\nWelcome to the File Store Bot.\nCollection delivery and file search will be added in the next phases."
+                'Hey ' . $name . "! 👋\n\nWelcome to the File Store Bot.\nUse /help to see available commands."
+            );
+            return;
+        }
+
+        if ($command === '/help') {
+            $this->telegram->sendMessage(
+                $context->chatId,
+                "Available commands:\n/start — Start the bot\n/help — Show help\n/id — Show your Telegram user ID"
             );
             return;
         }
@@ -56,13 +67,13 @@ final class UpdateRouter
             }
 
             $current = $this->settings->all();
-            $lines = ['⚙️ Bot Settings (read-only in this phase)', ''];
+            $lines = ['⚙️ Bot Settings (read-only for now)', ''];
             if ($current === []) {
                 $lines[] = 'No settings have been saved yet.';
             } else {
                 foreach ($current as $key => $value) {
                     $safeValue = preg_match('/token|secret|password|address|upi|crypto/i', $key)
-                        ? '[hidden]' : mb_substr($value, 0, 160);
+                        ? '[hidden]' : (function_exists('mb_substr') ? mb_substr($value, 0, 160) : substr($value, 0, 160));
                     $lines[] = $key . ': ' . $safeValue;
                 }
             }

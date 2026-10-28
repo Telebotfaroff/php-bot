@@ -131,7 +131,7 @@ final class UpdateRouter
         if ($command === '/help') {
             $this->telegram->sendMessage(
                 $context->chatId,
-                "Available commands:\n/start — Start the bot\n/help — Show help\n/id — Show your Telegram user ID\n/post — Start an admin collection draft\n/done — Preview videos collected in the current draft\n/cancel — Cancel the current draft\n/skip — Skip optional thumbnail\n/setting set dump_channel_id CHANNEL_ID\n/setting set post_channel_id CHANNEL_ID\n/setting set force_subscribe_channel_id CHANNEL_ID\n/setting set collection_access_cost 0"
+                "Available commands:\n/start — Start the bot\n/balance — Check wallet balance\n/help — Show help\n/id — Show your Telegram user ID\n/post — Start an admin collection draft\n/done — Preview videos collected in the current draft\n/cancel — Cancel the current draft\n/skip — Skip optional thumbnail\n/setting set dump_channel_id CHANNEL_ID\n/setting set post_channel_id CHANNEL_ID\n/setting set force_subscribe_channel_id CHANNEL_ID\n/setting set collection_access_cost 0\n/setting set welcome_coins 10"
             );
             return;
         }

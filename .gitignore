@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+config/local.php
+private-config.php
+storage/logs/*
+!storage/logs/.gitkeep
+*.log
+*.tmp
+/vendor/
+/.phpunit.cache/
+/.idea/
+/.vscode/
+/.DS_Store

@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use App\Config\Config;
 use App\Database\Connection;
+use App\Database\SettingsRepository;
 use App\Database\UpdateProcessor;
+use App\Security\AdminAuthorizer;
 use App\Security\WebhookVerifier;
+use App\Telegram\BotApiClient;
+use App\Telegram\UpdateRouter;
 use App\Support\Logger;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
@@ -47,13 +51,22 @@ try {
         exit;
     }
 
-    // Phase 2 persists each update once and records the sender when available.
-    // Command handling is added in a later phase.
-    $processor = new UpdateProcessor(Connection::make());
+    // Persist the update first. Only new updates reach the command router.
+    $pdo = Connection::make();
+    $processor = new UpdateProcessor($pdo);
     $isNewUpdate = $processor->process($update);
     Logger::info($isNewUpdate ? 'Telegram update stored' : 'Duplicate Telegram update ignored', [
         'update_id' => (int) $update['update_id'],
     ]);
+
+    if ($isNewUpdate) {
+        $router = new UpdateRouter(
+            new BotApiClient(),
+            new SettingsRepository($pdo),
+            new AdminAuthorizer()
+        );
+        $router->dispatch($update);
+    }
 
     http_response_code(200);
     echo json_encode(['ok' => true]);

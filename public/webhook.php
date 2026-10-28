@@ -43,13 +43,12 @@ try {
         exit;
     }
 
-    // Phase 1 validates and acknowledges only. Durable deduplication and handlers
-    // are added after the database phase.
-    Logger::info('Telegram update received', [
+    // Phase 2 persists each update once and records the sender when available.
+    // Command handling is added in a later phase.
+    $processor = new UpdateProcessor(Connection::make());
+    $isNewUpdate = $processor->process($update);
+    Logger::info($isNewUpdate ? 'Telegram update stored' : 'Duplicate Telegram update ignored', [
         'update_id' => (int) $update['update_id'],
-        'update_type' => isset($update['message']) ? 'message'
-            : (isset($update['callback_query']) ? 'callback_query'
-            : (isset($update['channel_post']) ? 'channel_post' : 'other')),
     ]);
 
     http_response_code(200);

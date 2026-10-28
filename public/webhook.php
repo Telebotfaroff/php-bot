@@ -68,7 +68,7 @@ try {
     $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
     $wallet = new WalletService($pdo, $settings);
     $premium = new PremiumService($pdo);
-    $referrals = new ReferralService($pdo);
+    $referrals = new ReferralService($pdo, $settings);
     $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals, new AdminFeatureService($pdo));
     $outbox = new UpdateOutbox($pdo, $router);
     $dispatched = $outbox->dispatchOne((int) $updateId);

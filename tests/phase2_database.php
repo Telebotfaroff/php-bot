@@ -127,7 +127,9 @@ check((int) $sub->fetchColumn() === 1, 'approved request creates an active subsc
 check(!$premium->decide($requestId, 123456, true), 'duplicate approval cannot grant duplicate Premium');
 
 
-$referrals = new ReferralService($pdo);
+$settings = new SettingsRepository($pdo);
+$settings->set('referral_reward_hours', '48');
+$referrals = new ReferralService($pdo, $settings);
 $referrerId = random_int(500000000, 549999999);
 $referredId = random_int(550000000, 599999999);
 foreach ([[$referrerId, 'Referral Owner'], [$referredId, 'Referral Guest']] as [$id, $firstName]) {
@@ -139,9 +141,9 @@ foreach ([[$referrerId, 'Referral Owner'], [$referredId, 'Referral Guest']] as [
 $referrals->processStart($referrerId, null);
 $qualified = $referrals->processStart($referredId, $referrerId);
 check($qualified['is_new'] && $qualified['rewarded'], 'qualifies a new user referral');
-$premiumCheck = $pdo->prepare("SELECT COUNT(*) FROM premium_subscriptions WHERE telegram_user_id = :user AND status = 'active' AND expires_at > DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 23 HOUR)");
+$premiumCheck = $pdo->prepare("SELECT COUNT(*) FROM premium_subscriptions WHERE telegram_user_id = :user AND status = 'active' AND expires_at > DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 47 HOUR)");
 $premiumCheck->execute(['user' => $referrerId]);
-check((int) $premiumCheck->fetchColumn() === 1, 'referral reward grants approximately 24 hours of Premium');
+check((int) $premiumCheck->fetchColumn() === 1, 'configured referral reward grants 48 hours of Premium');
 $repeat = $referrals->processStart($referredId, $referrerId);
 check(!$repeat['is_new'] && !$repeat['rewarded'], 'repeat start does not issue another referral reward');
 $self = $referrals->processStart($referrerId, $referrerId);

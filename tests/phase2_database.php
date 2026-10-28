@@ -33,9 +33,11 @@ foreach ([
     'collection_delivery_items',
     'delivery_outgoing_messages',
 ] as $table) {
-    $tableCheck = $pdo->prepare('SHOW TABLES LIKE :table');
+    $tableCheck = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table'
+    );
     $tableCheck->execute(['table' => $table]);
-    check($tableCheck->fetchColumn() === $table, 'creates ' . $table . ' table');
+    check((int) $tableCheck->fetchColumn() === 1, 'creates ' . $table . ' table');
 }
 
 $processor = new UpdateProcessor($pdo);

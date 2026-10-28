@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Security\AdminAuthorizer;
+use App\Security\ShortenerCallbackVerifier;
 use App\Telegram\UpdateContext;
 
 putenv('BOT_OWNER_ID=123456789');

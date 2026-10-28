@@ -13,7 +13,7 @@ PHP Telegram bot for shared cPanel hosting, designed around MySQL/MariaDB, Teleg
 - Owner settings commands for dump/post/force-subscription channel IDs and collection access cost
 - CLI migration/webhook setup commands and cPanel-compatible outbox worker
 
-This is still an incremental development build, not production-ready. The current delivery implementation sends videos sequentially to preserve order and tracks progress; media-album batching, the full wallet/coin earning workflow, Premium purchase administration, referrals, configurable auto-delete workers, and the full interactive Settings panel remain future work. Premium access is read from the subscription table and bypasses coin charges, but subscription management is not yet implemented. Get Coins and View Premium Plans are UI placeholders until their workflows are added.
+This is still an incremental development build, not production-ready. The current delivery implementation preserves order, sends compatible runs of 2–10 videos/documents as Telegram media groups, tracks each delivered item, and resumes failed jobs; the full wallet/coin earning workflow, Premium purchase administration, referrals, configurable auto-delete workers, and the full interactive Settings panel remain future work. Premium access is read from the subscription table and bypasses coin charges, but subscription management is not yet implemented. Get Coins and View Premium Plans are UI placeholders until their workflows are added.
 
 ## Requirements
 
@@ -73,7 +73,7 @@ Configure channels (the bot must be an administrator in the dump and post channe
 
 For Premium access, an active row in premium_subscriptions grants access without coin deduction. The Premium purchase and administration workflow is not implemented yet. Wallet balances are currently schema-backed and must be credited through a trusted future wallet workflow; do not manually alter balances for a production bot without a corresponding ledger entry.
 
-When a user opens a valid published collection link, the bot verifies required channel membership, checks Premium, and if needed checks/debits the configured coin cost transactionally. It copies saved messages in original sequence and records each successful delivery. If a delivery fails, the user can reopen the same link to retry undelivered items without being charged a second time for that incomplete job.
+When a user opens a valid published collection link, the bot verifies required channel membership, checks Premium, and if needed checks/debits the configured coin cost transactionally. It sends compatible consecutive items in groups of 2–10 and copies single items individually, preserving original order and recording each successful delivery. If a delivery fails, the user can reopen the same link to retry undelivered items without being charged a second time for that incomplete job.
 
 ## cPanel deployment notes
 

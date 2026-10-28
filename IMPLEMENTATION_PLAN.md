@@ -72,7 +72,7 @@
 - Added `/start post_<code>` resolution for published collections, configurable force-subscription verification via `getChatMember`, and fail-closed behavior if Telegram cannot verify membership.
 - Added active Premium lookup; active Premium bypasses coin cost. Added configurable `collection_access_cost` (defaults to 0/free), wallet balance locking, transactional coin debit and append-only ledger entry for paid access. Insufficient funds do not debit and show Get Coins / View Premium Plans placeholders.
 - Added delivery jobs and per-file status/message tracking. Videos are copied sequentially from dump-channel messages in original order; failed jobs can resume without charging again for that incomplete job.
-- Current limitations: media-group batching of 2–10 items, the actual wallet funding/Get Coins workflow, Premium plan/purchase management, delivery concurrency leases and auto-delete processing are not implemented. A network timeout after Telegram accepts a copy can still create a duplicate.
+- Added ordered media-group delivery for compatible consecutive items (2–10 videos or documents per Telegram album); single items are copied individually. Remaining limitations: the actual wallet funding/Get Coins workflow, Premium plan/purchase management, delivery concurrency leases and auto-delete processing are not implemented. A network timeout after Telegram accepts a copy or album can still create a duplicate.
 - Exit: add automated service tests for membership, premium bypass, coin debit, insufficient funds and retry; confirm latest GitHub Actions run passes; then test against a private bot and channels.
 
 ### Phase 7 — Wallet and Get Coins workflow

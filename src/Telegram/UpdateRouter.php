@@ -119,11 +119,12 @@ final class UpdateRouter
             }
             try {
                 $value = $this->validateAdminSettingValue($pendingSetting, trim($context->text));
+                if ($pendingSetting === 'force_subscribe_channel_id' && $value === '0') $value = '';
                 $this->settings->set($pendingSetting, $value, $context->userId);
                 $this->settings->set($pendingKey, '');
                 $this->telegram->sendMessage($context->chatId, '✅ Saved ' . $this->adminSettingLabel($pendingSetting) . '.');
             } catch (\\InvalidArgumentException $exception) {
-                $this->telegram->sendMessage($context->chatId, $exception->getMessage() . "\\nSend the value again, or use /cancel to leave edit mode.");
+                $this->telegram->sendMessage($context->chatId, $exception->getMessage() . "\nSend the value again, or use /cancel to leave edit mode.");
             }
             return;
         }
@@ -390,7 +391,7 @@ final class UpdateRouter
                 'premium_crypto_instructions' => 'Send the crypto network and wallet instructions users should see.',
                 default => 'Send the new value.',
             };
-            $this->telegram->sendMessage($chatId, '✏️ Edit ' . $this->adminSettingLabel($key) . "\\n\\n" . $hint . "\\n\\nSend /cancel to cancel.");
+            $this->telegram->sendMessage($chatId, '✏️ Edit ' . $this->adminSettingLabel($key) . "\n\n" . $hint . "\n\nSend /cancel to cancel.");
             return;
         }
         $this->sendAdminMenu($chatId);
@@ -435,7 +436,7 @@ final class UpdateRouter
             'cleanup' => '🗑 Auto-delete Settings',
             default => '⚙️ Settings',
         };
-        $this->telegram->sendMessage($chatId, $title . "\\n\\nTap an item to edit it.", [
+        $this->telegram->sendMessage($chatId, $title . "\n\nTap an item to edit it.", [
             'reply_markup' => ['inline_keyboard' => $keyboard],
         ]);
     }
@@ -468,7 +469,7 @@ final class UpdateRouter
 
     private function validateAdminSettingValue(string $key, string $value): string
     {
-        if ($value === '') throw new InvalidArgumentException('Value cannot be empty.');
+        if ($value === '') throw new \\InvalidArgumentException('Value cannot be empty.');
         if (in_array($key, ['dump_channel_id', 'post_channel_id', 'force_subscribe_channel_id'], true)) {
             if ($key === 'force_subscribe_channel_id' && $value === '0') return '0';
             if (!preg_match('/^(?:-?[0-9]{5,}|@[A-Za-z][A-Za-z0-9_]{4,})$/', $value)) {
@@ -485,7 +486,7 @@ final class UpdateRouter
             return strtolower($value);
         }
         if ($key === 'auto_delete_after_seconds') {
-            if (!ctype_digit($value) || (int) $value < 60 || (int) $value > 31536000) throw new InvalidArgumentException('Enter a delay between 60 and 31531536000 seconds.');
+            if (!ctype_digit($value) || (int) $value < 60 || (int) $value > 31536000) throw new InvalidArgumentException('Enter a delay between 60 and 31536000 seconds.');
             return $value;
         }
         if (in_array($key, ['premium_upi_instructions', 'premium_crypto_instructions'], true)) {

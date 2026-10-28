@@ -41,4 +41,16 @@ $callback = UpdateContext::from([
 ]);
 phase3Check($callback->isCallback && $callback->callbackData === 'future_action', 'identifies callback updates');
 
+
+$callbackSecret = str_repeat('s', 48);
+$callbackToken = str_repeat('a', 64);
+$callbackProvider = 'testprovider';
+$callbackTimestamp = (string) time();
+$callbackSignature = ShortenerCallbackVerifier::sign($callbackProvider, $callbackToken, (int) $callbackTimestamp, $callbackSecret);
+phase3Check(ShortenerCallbackVerifier::verify($callbackProvider, $callbackToken, $callbackTimestamp, $callbackSignature, $callbackProvider, $callbackSecret), 'accepts valid signed provider callback');
+phase3Check(!ShortenerCallbackVerifier::verify($callbackProvider, $callbackToken, $callbackTimestamp, str_repeat('0', 64), $callbackProvider, $callbackSecret), 'rejects invalid callback signature');
+phase3Check(!ShortenerCallbackVerifier::verify($callbackProvider, $callbackToken, (string) (time() - 600), $callbackSignature, $callbackProvider, $callbackSecret), 'rejects stale callback timestamps');
+phase3Check(!ShortenerCallbackVerifier::verify('otherprovider', $callbackToken, $callbackTimestamp, $callbackSignature, $callbackProvider, $callbackSecret), 'rejects callback from unconfigured provider');
+phase3Check(!ShortenerCallbackVerifier::verify($callbackProvider, $callbackToken, $callbackTimestamp, $callbackSignature, $callbackProvider, 'short'), 'rejects weak callback secret');
+
 echo "Phase 3 authorization/context tests passed.\n";

@@ -138,3 +138,16 @@ The bot records each successfully delivered collection message in `delivery_outg
 ```
 
 Use the PHP CLI path shown by your cPanel hosting provider. Keep logs outside the public web root. Disable the feature with `/setting set auto_delete_enabled false`. The worker only deletes messages tracked from collection deliveries; it does not delete users' unrelated messages. Telegram may refuse deletion because of permissions or message-age limits; those failures are retried up to 12 times and logged.
+
+
+## Safe deployment preflight
+
+Before enabling the auto-delete cron, upload the latest code and run this read-only diagnostic from the project root using the same PHP CLI binary as your cron:
+
+```bash
+php bin/check-deployment.php
+```
+
+It checks the PHP version/extensions, database connection, required auto-delete columns from migration 009, Telegram bot-token authentication, and configured auto-delete delay. It does not change settings or delete messages. Fix any `[FAIL]` line before continuing. Keep the command-line output private because database and hosting errors can reveal infrastructure details.
+
+After preflight passes, run the migration command if you have not already, enable auto-delete with a short test delay (minimum 60 seconds), deliver a test collection to a private test chat where the bot has permission to delete its own messages, and confirm the cron log reports a successful deletion. Then set your intended delay, such as 86400 seconds for 24 hours.

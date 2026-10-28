@@ -25,7 +25,7 @@ final class AdminFeatureService
             "SELECT c.id, c.title, c.public_code AS code, c.created_at,
                     (SELECT COUNT(*) FROM collection_files f WHERE f.collection_id = c.id) AS file_count
              FROM collections c
-             WHERE c.status = 'published' AND c.title LIKE :query ESCAPE '\\\\'
+             WHERE c.status = 'published' AND c.title LIKE :query
              ORDER BY c.published_at DESC, c.id DESC LIMIT {$limit}"
         );
         $statement->execute(['query' => $like]);
@@ -34,7 +34,7 @@ final class AdminFeatureService
         $event = $this->pdo->prepare(
             'INSERT INTO bot_search_events (telegram_user_id, query_hash, result_count) VALUES (:user, :hash, :count)'
         );
-        $event->execute(['user' => $userId, 'hash' => hash('sha256', mb_strtolower($query, 'UTF-8')), 'count' => count($rows)]);
+        $event->execute(['user' => $userId, 'hash' => hash('sha256', strtolower($query)), 'count' => count($rows)]);
         return $rows;
     }
 

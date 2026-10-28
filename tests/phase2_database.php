@@ -21,7 +21,7 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 3, 'applies all migrations present on first run');
+check(count($firstRun) === 4, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
 
 $settingsTable = $pdo->query('SHOW TABLES LIKE \'bot_settings\'')->fetchColumn();

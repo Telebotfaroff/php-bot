@@ -21,7 +21,7 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 2, 'applies all migrations present on first run');
+check(count($firstRun) === 3, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
 
 $settingsTable = $pdo->query('SHOW TABLES LIKE \'bot_settings\'')->fetchColumn();
@@ -45,6 +45,12 @@ $update = [
 
 check($processor->process($update), 'stores a new Telegram update');
 check(!$processor->process($update), 'ignores a duplicate Telegram update');
+$jobQuery = $pdo->prepare('SELECT status, payload_json FROM telegram_update_jobs WHERE update_id = :id');
+$jobQuery->execute(['id' => $updateId]);
+$job = $jobQuery->fetch();
+check(is_array($job) && $job['status'] === 'pending', 'persists a pending outbox job for each new update');
+$storedPayload = json_decode((string) ($job['payload_json'] ?? ''), true);
+check(is_array($storedPayload) && (int) $storedPayload['update_id'] === $updateId, 'outbox preserves the original update payload');
 
 $userQuery = $pdo->prepare('SELECT first_name, username FROM users WHERE telegram_user_id = :id');
 $userQuery->execute(['id' => $userId]);

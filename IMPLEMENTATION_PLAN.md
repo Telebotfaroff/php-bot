@@ -31,14 +31,16 @@
 - No application implementation yet.
 - Exit: architecture and phased plan committed. Repository began without application source; actual cPanel capabilities still need confirmation.
 
-### Phase 1 — Runtime foundation and security (current)
+### Phase 1 — Runtime foundation and security (completed)
 - Added lightweight PHP bootstrap/autoloading, environment/private-file configuration, JSON logging, Telegram webhook secret verification, Telegram Bot API client, secured webhook entrypoint, CLI-only webhook setup command, `.env.example`, `.gitignore`, README and webhook-secret smoke tests.
-- Webhook intentionally validates and acknowledges updates only; commands and persistent update deduplication are not implemented yet.
-- Exit: run PHP syntax checks and `php tests/phase1_smoke.php`; review configuration and hosting assumptions before Phase 2.
+- GitHub Actions PHP syntax checks and Phase 1 smoke tests passed in the reported workflow run.
+- Exit: syntax and webhook-secret smoke checks passed.
 
-### Phase 2 — Database and update processing
-- Add versioned SQL migrations, PDO connection, repositories, update-id deduplication and basic user records.
-- Exit: migrations apply cleanly; duplicate Telegram updates are harmless.
+### Phase 2 — Database and update processing (implemented; CI verification pending)
+- Added PDO MySQL/MariaDB connection factory, configurable database settings, versioned PHP migrations, CLI migration command, initial `users` and `telegram_updates` tables, and transactional update persistence with duplicate-update protection.
+- Webhook now persists valid updates and sender profiles when available; bot command handling is still a later phase.
+- Added a MySQL-backed GitHub Actions integration test for migration idempotency, update deduplication and sender persistence.
+- Exit: confirm the new GitHub Actions run passes; apply migrations on the intended database before enabling the webhook.
 
 ### Phase 3 — Admin authorization and settings
 - Secure owner/admin commands and persistent settings for channel IDs and feature values.

@@ -21,11 +21,22 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 4, 'applies all migrations present on first run');
+check(count($firstRun) === 5, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
 
-$settingsTable = $pdo->query('SHOW TABLES LIKE \'bot_settings\'')->fetchColumn();
-check($settingsTable === 'bot_settings', 'creates persistent bot settings table');
+foreach ([
+    'bot_settings',
+    'wallet_accounts',
+    'wallet_ledger',
+    'premium_subscriptions',
+    'collection_delivery_jobs',
+    'collection_delivery_items',
+    'delivery_outgoing_messages',
+] as $table) {
+    $tableCheck = $pdo->prepare('SHOW TABLES LIKE :table');
+    $tableCheck->execute(['table' => $table]);
+    check($tableCheck->fetchColumn() === $table, 'creates ' . $table . ' table');
+}
 
 $processor = new UpdateProcessor($pdo);
 $updateId = random_int(700000000, 799999999);
@@ -55,8 +66,8 @@ check(is_array($storedPayload) && (int) $storedPayload['update_id'] === $updateI
 $userQuery = $pdo->prepare('SELECT first_name, username FROM users WHERE telegram_user_id = :id');
 $userQuery->execute(['id' => $userId]);
 $user = $userQuery->fetch();
-
 check(is_array($user) && $user['first_name'] === 'Phase Two Test', 'stores sender profile');
+
 $updateQuery = $pdo->prepare('SELECT COUNT(*) FROM telegram_updates WHERE update_id = :id');
 $updateQuery->execute(['id' => $updateId]);
 check((int) $updateQuery->fetchColumn() === 1, 'keeps only one row per Telegram update');

@@ -8,6 +8,7 @@ use App\Database\UpdateProcessor;
 use App\Database\SettingsRepository;
 use App\Services\WalletService;
 use App\Services\PremiumService;
+use App\Services\ReferralService;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
 
@@ -141,7 +142,7 @@ $premiumCheck->execute(['user' => $referrerId]);
 check((int) $premiumCheck->fetchColumn() === 1, 'referral reward grants approximately 24 hours of Premium');
 $repeat = $referrals->processStart($referredId, $referrerId);
 check(!$repeat['is_new'] && !$repeat['rewarded'], 'repeat start does not issue another referral reward');
-$self = $referrals->processStart(random_int(200000000, 299999999), $referrerId);
+$self = $referrals->processStart($referrerId, $referrerId);
 check(!$self['rewarded'], 'start without referral does not issue a referral reward');
 $stats = $referrals->stats($referrerId);
 check($stats['qualified'] === 1 && $stats['rewards'] === 1, 'referral stats count the reward exactly once');

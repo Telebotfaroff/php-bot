@@ -151,3 +151,12 @@ php bin/check-deployment.php
 It checks the PHP version/extensions, database connection, required auto-delete columns from migration 009, Telegram bot-token authentication, and configured auto-delete delay. It does not change settings or delete messages. Fix any `[FAIL]` line before continuing. Keep the command-line output private because database and hosting errors can reveal infrastructure details.
 
 After preflight passes, run the migration command if you have not already, enable auto-delete with a short test delay (minimum 60 seconds), deliver a test collection to a private test chat where the bot has permission to delete its own messages, and confirm the cron log reports a successful deletion. Then set your intended delay, such as 86400 seconds for 24 hours.
+
+
+## Web installation wizard
+
+A cPanel setup wizard is available at `public/install.php`. Deploy the project so the private configuration directory is outside the web document root; the wizard refuses to write secrets inside the public document root. Create the MySQL database and user in cPanel first, upload/extract the repository, and open `https://your-domain.example/install.php` (or the equivalent path where the public directory is served).
+
+The wizard validates the PHP runtime/extensions, checks the Telegram token and username, connects to MySQL, applies migrations, writes the config with restrictive file permissions, and registers the webhook. The generated config is stored at `../private/php-bot-config.php` relative to the project directory and is loaded automatically by the application when `BOT_CONFIG_FILE` is not set.
+
+**Security:** Use HTTPS only. After successful setup, immediately remove `public/install.php` from the server. Keep the generated config and logs outside the public web root. If webhook registration fails after the config is saved, run `php bin/set-webhook.php` from CLI; the default private config path is automatically detected. Then configure the cron workers as described above.

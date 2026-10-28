@@ -75,9 +75,12 @@
 - Added ordered media-group delivery for compatible consecutive items (2–10 videos or documents per Telegram album); single items are copied individually. Remaining limitations: the actual wallet funding/Get Coins workflow, Premium plan/purchase management, delivery concurrency leases and auto-delete processing are not implemented. A network timeout after Telegram accepts a copy or album can still create a duplicate.
 - Exit: add automated service tests for membership, premium bypass, coin debit, insufficient funds and retry; confirm latest GitHub Actions run passes; then test against a private bot and channels.
 
-### Phase 7 — Wallet and Get Coins workflow
-- Implement ledger, welcome reward, atomic debit/credit, insufficient-balance UI and verification-task records.
-- Exit: concurrency/idempotency tests pass; unverified tasks never credit coins.
+### Phase 7 — Wallet foundation (implemented; provider integration pending)
+- Added `/balance` and `/wallet`, configurable one-time welcome reward via `welcome_coins`, an idempotent append-only ledger credit, and wallet account initialization.
+- Added verification task records with random tokens stored only as SHA-256 hashes, provider code, reward snapshot and expiry. `WalletService::creditVerifiedTask` rejects unknown/wrong-provider/expired/repeated tokens and performs the credit plus ledger update transactionally.
+- Added integration tests for one-time welcome credits, wrong-provider rejection, no credit before verification and duplicate callback idempotency.
+- Remaining: provider-specific shortener URL generation and authenticated server-side callback/API adapter. Until that is implemented, Get Coins remains a clear placeholder and no user action alone credits coins.
+- Exit: latest CI passes; then implement a documented provider adapter in Phase 9.
 
 ### Phase 8 — Premium plans and manual subscriptions
 - Admin CRUD for plans and safe subscription expiry/extension.

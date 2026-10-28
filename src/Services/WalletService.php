@@ -101,14 +101,13 @@ final class WalletService
         $this->pdo->beginTransaction();
         try {
             $taskQuery = $this->pdo->prepare(
-                'SELECT * FROM wallet_verification_tasks WHERE token_hash = :hash FOR UPDATE'
+                'SELECT * FROM wallet_verification_tasks WHERE token_hash = :hash AND expires_at > CURRENT_TIMESTAMP FOR UPDATE'
             );
             $taskQuery->execute(['hash' => $hash]);
             $task = $taskQuery->fetch();
             if (!is_array($task)
                 || !hash_equals((string) $task['provider_code'], $providerCode)
-                || $task['status'] !== 'pending'
-                || strtotime((string) $task['expires_at']) <= time()) {
+                || $task['status'] !== 'pending') {
                 $this->pdo->rollBack();
                 return false;
             }

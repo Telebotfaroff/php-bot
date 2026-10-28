@@ -52,6 +52,7 @@ foreach ([
 }
 
 
+$settings = new SettingsRepository($pdo);
 $backupService = new DatabaseBackupService($pdo);
 $settings->set('test_api_token', 'must-never-appear-in-backup');
 $backupPath = $backupService->createTemporaryBackup();

@@ -68,9 +68,12 @@
 - Opening a deep link does not yet deliver videos; that requires the access-check and delivery phase.
 - Exit: add deep-link resolution, access checks and ordered delivery in Phase 6.
 
-### Phase 6 — Access checks and delivery
-- Implement force-subscription, active-Premium bypass, coin affordability checks and ordered batch delivery with retry tracking.
-- Exit: no charge on rejected access; Premium users never lose coins for access.
+### Phase 6 — Access checks and delivery (initial implementation committed; CI verification pending)
+- Added `/start post_<code>` resolution for published collections, configurable force-subscription verification via `getChatMember`, and fail-closed behavior if Telegram cannot verify membership.
+- Added active Premium lookup; active Premium bypasses coin cost. Added configurable `collection_access_cost` (defaults to 0/free), wallet balance locking, transactional coin debit and append-only ledger entry for paid access. Insufficient funds do not debit and show Get Coins / View Premium Plans placeholders.
+- Added delivery jobs and per-file status/message tracking. Videos are copied sequentially from dump-channel messages in original order; failed jobs can resume without charging again for that incomplete job.
+- Current limitations: media-group batching of 2–10 items, the actual wallet funding/Get Coins workflow, Premium plan/purchase management, delivery concurrency leases and auto-delete processing are not implemented. A network timeout after Telegram accepts a copy can still create a duplicate.
+- Exit: add automated service tests for membership, premium bypass, coin debit, insufficient funds and retry; confirm latest GitHub Actions run passes; then test against a private bot and channels.
 
 ### Phase 7 — Wallet and Get Coins workflow
 - Implement ledger, welcome reward, atomic debit/credit, insufficient-balance UI and verification-task records.

@@ -12,6 +12,7 @@ use App\Security\WebhookVerifier;
 use App\Services\CollectionDeliveryService;
 use App\Services\PostWizardService;
 use App\Services\PremiumService;
+use App\Services\ReferralService;
 use App\Services\WalletService;
 use App\Support\Logger;
 use App\Telegram\BotApiClient;
@@ -66,7 +67,8 @@ try {
     $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
     $wallet = new WalletService($pdo, $settings);
     $premium = new PremiumService($pdo);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium);
+    $referrals = new ReferralService($pdo);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals);
     $outbox = new UpdateOutbox($pdo, $router);
     $dispatched = $outbox->dispatchOne((int) $updateId);
 

@@ -108,6 +108,37 @@ final class UpdateRouter
         $command = strtolower((string) preg_replace('/@\w+$/', '', $rawCommand));
         $argument = is_array($parts) ? trim((string) ($parts[1] ?? '')) : '';
 
+        $promoPendingKey = 'admin_pending_promo_create_' . $context->userId;
+        if ((string) $this->settings->get($promoPendingKey, '') === '1' && $context->text !== null && !str_starts_with(trim($context->text), '/')) {
+            if (!$this->admin->isOwner($context->userId)) {
+                $this->settings->set($promoPendingKey, '');
+                $this->telegram->sendMessage($context->chatId, '⛔ This admin action is no longer available.');
+                return;
+            }
+            $fields = preg_split('/\\s+/', trim($context->text));
+            if (!is_array($fields) || count($fields) !== 4) {
+                $this->telegram->sendMessage($context->chatId, "Format: CODE COINS MAX_USERS EXPIRY_DAYS\\nExample: SUMMER50 50 100 2\\nSend /cancel to cancel.");
+                return;
+            }
+            try {
+                $promo = $this->wallet->createPromoCode((string) $fields[0], (int) $fields[1], (int) $fields[2], (int) $fields[3], $context->userId);
+                $this->settings->set($promoPendingKey, '');
+                $this->telegram->sendMessage($context->chatId,
+                    "✅ Promo code created!\\n\\nCode: " . $promo['code'] . "\\nReward: " . $promo['reward'] . " coins\\nMaximum users: " . $promo['max_uses']
+                    . "\\nExpires: " . $promo['expires_at'] . " UTC\\n\\nUsers can send the code as a normal message to redeem it.");
+            } catch (\\Throwable $exception) {
+                $this->telegram->sendMessage($context->chatId, 'Could not create promo code: ' . $exception->getMessage());
+            }
+            return;
+        }
+        if ((string) $this->settings->get($promoPendingKey, '') === '1' && in_array($command, ['/cancel', '/setting', '/settings'], true)) {
+            $this->settings->set($promoPendingKey, '');
+            if ($command === '/cancel') {
+                $this->telegram->sendMessage($context->chatId, 'Promo creation cancelled.');
+                return;
+            }
+        }
+
         // Complete a setting edit started from the inline admin menu.
         $pendingKey = 'admin_pending_' . $context->userId;
         $pendingSetting = (string) $this->settings->get($pendingKey, '');
@@ -127,6 +158,9 @@ final class UpdateRouter
                 $this->telegram->sendMessage($context->chatId, $exception->getMessage() . "\nSend the value again, or use /cancel to leave edit mode.");
             }
             return;
+        }
+        if ((string) $this->settings->get($promoPendingKey, '') === '1' && in_array($command, ['/cancel', '/setting', '/settings'], true)) {
+            $this->settings->set($promoPendingKey, '');
         }
         if ($pendingSetting !== '' && in_array($command, ['/cancel', '/setting', '/settings'], true)) {
             $this->settings->set($pendingKey, '');
@@ -335,6 +369,27 @@ final class UpdateRouter
             return;
         }
 
+        // A plain text promo code is checked before handing free text to the collection wizard.
+        if ($context->text !== null && preg_match('/^[A-Za-z0-9_-]{3,32}$/', trim($context->text))) {
+            $result = $this->wallet->redeemPromoCode($context->userId, trim($context->text));
+            if ($result['status'] === 'redeemed') {
+                $this->telegram->sendMessage($context->chatId, '🎉 Promo code accepted! You received ' . $result['coins'] . ' coins.\\nWallet balance: ' . $result['balance'] . ' coins.');
+                return;
+            }
+            if ($result['status'] === 'already_used') {
+                $this->telegram->sendMessage($context->chatId, 'You have already redeemed this promo code.');
+                return;
+            }
+            if ($result['status'] === 'expired') {
+                $this->telegram->sendMessage($context->chatId, 'This promo code has expired or is disabled.');
+                return;
+            }
+            if ($result['status'] === 'exhausted') {
+                $this->telegram->sendMessage($context->chatId, 'Sorry, this promo code has reached its user limit.');
+                return;
+            }
+        }
+
         // Wizard messages are handled last so /help and /settings remain usable mid-draft.
         $this->postWizard->handleMessage($update, $context->userId, $context->chatId, $context->text);
     }
@@ -361,7 +416,26 @@ final class UpdateRouter
             $this->sendAdminMenu($chatId);
             return;
         }
-        if (preg_match('/^admin:cat:(channels|access|wallet|shortener|premium|cleanup)$/', $data, $match)) {
+        if ($data === 'admin:promo:create') {
+            $this->settings->set('admin_pending_promo_create_' . $context->userId, '1');
+            $this->telegram->sendMessage($chatId, "🎟 Create a promo code\\n\\nSend four values separated by spaces:\\nCODE COINS MAX_USERS EXPIRY_DAYS\\n\\nExample: SUMMER50 50 100 2\\n\\nThis creates SUMMER50 for 50 coins, up to 100 users, expiring in 2 days.\\nUse /cancel to cancel.");
+            return;
+        }
+        if ($data === 'admin:promo:list') {
+            $promos = $this->wallet->recentPromoCodes(10);
+            if ($promos === []) {
+                $this->telegram->sendMessage($chatId, 'No promo codes have been created yet.');
+                return;
+            }
+            $lines = ['🎟 Recent promo codes', ''];
+            foreach ($promos as $promo) {
+                $status = !(bool) $promo['is_active'] ? 'disabled' : (strtotime($promo['expires_at']) <= time() ? 'expired' : ((int) $promo['redeemed_count'] >= (int) $promo['max_uses'] ? 'fully redeemed' : 'active'));
+                $lines[] = $promo['code'] . ' — ' . (int) $promo['reward_coins'] . ' coins — ' . (int) $promo['redeemed_count'] . '/' . (int) $promo['max_uses'] . ' users — ' . $status . ' — expires ' . $promo['expires_at'] . ' UTC';
+            }
+            $this->telegram->sendMessage($chatId, implode("\\n", $lines));
+            return;
+        }
+        if (preg_match('/^admin:cat:(channels|access|wallet|shortener|premium|cleanup|promos)$/', $data, $match)) {
             $this->sendAdminCategory($chatId, $match[1]);
             return;
         }
@@ -403,6 +477,7 @@ final class UpdateRouter
             [['text' => '📢 Channels', 'callback_data' => 'admin:cat:channels'], ['text' => '🔐 Access', 'callback_data' => 'admin:cat:access']],
             [['text' => '🪙 Wallet & Rewards', 'callback_data' => 'admin:cat:wallet'], ['text' => '🔗 Shortener', 'callback_data' => 'admin:cat:shortener']],
             [['text' => '⭐ Premium & Payments', 'callback_data' => 'admin:cat:premium'], ['text' => '🗑 Auto-delete', 'callback_data' => 'admin:cat:cleanup']],
+            [['text' => '🎟 Promo Codes', 'callback_data' => 'admin:cat:promos']],
         ];
         $this->telegram->sendMessage($chatId, "⚙️ File Store Admin Panel\\n\\nChoose a section below. Tap a setting to edit it; auto-delete can be toggled with one tap.", [
             'reply_markup' => ['inline_keyboard' => $keyboard],
@@ -411,6 +486,16 @@ final class UpdateRouter
 
     private function sendAdminCategory(int $chatId, string $category): void
     {
+        if ($category === 'promos') {
+            $this->telegram->sendMessage($chatId, '🎟 Promo Codes\\n\\nCreate codes that reward wallet coins, limit the number of users, and expire automatically.', [
+                'reply_markup' => ['inline_keyboard' => [
+                    [['text' => '➕ Create promo code', 'callback_data' => 'admin:promo:create']],
+                    [['text' => '📋 Recent promo codes', 'callback_data' => 'admin:promo:list']],
+                    [['text' => '⬅️ Back to Admin Panel', 'callback_data' => 'admin:menu']],
+                ]],
+            ]);
+            return;
+        }
         $definitions = $this->adminSettingDefinitions();
         $keyboard = [];
         foreach ($definitions as $definition) {

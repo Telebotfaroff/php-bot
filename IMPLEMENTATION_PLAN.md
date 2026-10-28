@@ -24,17 +24,17 @@
 
 ## Phases and exit criteria
 
-### Phase 0 — Repository and architecture (current)
+### Phase 0 — Repository and architecture (completed)
 - Inspect repository contents, default branch, existing commits and project conventions.
 - Confirm shared-cPanel assumptions and list items that must be verified on the actual hosting account.
 - Create `IMPLEMENTATION_PLAN.md` and `ARCHITECTURE.md`.
 - No application implementation yet.
-- Exit: report findings, decisions, unresolved provider/hosting choices, and wait for review.
+- Exit: architecture and phased plan committed. Repository began without application source; actual cPanel capabilities still need confirmation.
 
-### Phase 1 — Runtime foundation and security
-- Add minimal PHP bootstrap, environment/config loading, structured logging, safe error handling, webhook verification and Telegram Bot API client.
-- Add `.env.example`, `.gitignore`, and deployment notes. Never commit secrets.
-- Exit: syntax checks and tests for config validation and webhook authentication.
+### Phase 1 — Runtime foundation and security (current)
+- Added lightweight PHP bootstrap/autoloading, environment/private-file configuration, JSON logging, Telegram webhook secret verification, Telegram Bot API client, secured webhook entrypoint, CLI-only webhook setup command, `.env.example`, `.gitignore`, README and webhook-secret smoke tests.
+- Webhook intentionally validates and acknowledges updates only; commands and persistent update deduplication are not implemented yet.
+- Exit: run PHP syntax checks and `php tests/phase1_smoke.php`; review configuration and hosting assumptions before Phase 2.
 
 ### Phase 2 — Database and update processing
 - Add versioned SQL migrations, PDO connection, repositories, update-id deduplication and basic user records.

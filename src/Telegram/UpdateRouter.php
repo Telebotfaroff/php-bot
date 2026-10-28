@@ -554,6 +554,7 @@ final class UpdateRouter
                 'dump_channel_id', 'post_channel_id' => 'Send the channel ID (usually starts with -100), or a public @channelusername.',
                 'force_subscribe_channel_id' => 'Send a channel ID such as -1001234567890 or a public @channelusername. Send 0 to disable.',
                 'collection_access_cost', 'welcome_coins', 'shortener_reward_coins' => 'Send a whole number (0 or greater).',
+                'referral_reward_hours' => 'Send reward duration in hours (1–720; default 24).',
                 'shortener_provider_code' => 'Send a provider key such as gplinks (letters, numbers, _ and - only).',
                 'auto_delete_after_seconds' => 'Send the delay in seconds (minimum 60, maximum 31536000).',
                 'premium_upi_instructions' => 'Send the UPI payment instructions users should see.',
@@ -630,6 +631,7 @@ final class UpdateRouter
             ['key' => 'force_subscribe_channel_id', 'label' => 'Force-subscribe channel', 'category' => 'channels'],
             ['key' => 'collection_access_cost', 'label' => 'Collection access cost', 'category' => 'access'],
             ['key' => 'welcome_coins', 'label' => 'Welcome coins', 'category' => 'wallet'],
+            ['key' => 'referral_reward_hours', 'label' => 'Referral reward hours', 'category' => 'wallet'],
             ['key' => 'shortener_reward_coins', 'label' => 'Shortener reward coins', 'category' => 'wallet'],
             ['key' => 'shortener_provider_code', 'label' => 'Shortener provider', 'category' => 'shortener'],
             ['key' => 'premium_upi_instructions', 'label' => 'UPI instructions', 'category' => 'premium'],
@@ -660,6 +662,10 @@ final class UpdateRouter
         if (in_array($key, ['collection_access_cost', 'welcome_coins', 'shortener_reward_coins'], true)) {
             if (!preg_match('/^(0|[1-9][0-9]{0,8})$/', $value)) throw new \InvalidArgumentException('Enter a whole number from 0 to 999999999.');
             return $value;
+        }
+        if ($key === 'referral_reward_hours') {
+            if (!preg_match('/^[1-9][0-9]{0,2}$/', $value) || (int) $value > 720) throw new \\InvalidArgumentException('Enter a referral reward duration from 1 to 720 hours.');
+            return (string) (int) $value;
         }
         if ($key === 'shortener_provider_code') {
             if (!preg_match('/^[a-z][a-z0-9_-]{1,39}$/i', $value)) throw new \InvalidArgumentException('Use a provider key such as gplinks (letters, numbers, _ and - only).');

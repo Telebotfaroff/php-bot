@@ -141,6 +141,9 @@ final class UpdateProcessor
 
     private static function nullableString(mixed $value): ?string
     {
-        return is_string($value) && $value !== '' ? mb_substr($value, 0, 255) : null;
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+        return function_exists('mb_substr') ? mb_substr($value, 0, 255) : substr($value, 0, 255);
     }
 }

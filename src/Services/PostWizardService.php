@@ -181,7 +181,7 @@ final class PostWizardService
         $message = is_array($callback) ? ($callback['message'] ?? null) : null;
         $chatId = is_array($message) && is_numeric($message['chat']['id'] ?? null) ? (int) $message['chat']['id'] : null;
 
-        if ($callbackId !== null) $this->telegram->answerCallbackQuery($callbackId);
+        if ($callbackId !== null) {\n            try {\n                $this->telegram->answerCallbackQuery($callbackId);\n            } catch (\\Throwable) {\n                // Callback queries can expire between attempts; do not block the durable action.\n            }\n        }
         if ($chatId === null) return true;
 
         $draft = $this->getDraft($draftId);

@@ -8,6 +8,7 @@ use App\Database\SettingsRepository;
 use App\Security\AdminAuthorizer;
 use App\Services\CollectionDeliveryService;
 use App\Services\PostWizardService;
+use App\Services\PremiumService;
 use App\Services\WalletService;
 
 final class UpdateRouter
@@ -18,7 +19,8 @@ final class UpdateRouter
         private readonly AdminAuthorizer $admin,
         private readonly PostWizardService $postWizard,
         private readonly CollectionDeliveryService $collectionDelivery,
-        private readonly WalletService $wallet
+        private readonly WalletService $wallet,
+        private readonly PremiumService $premium
     ) {}
 
     /** @param array<string, mixed> $update */
@@ -38,12 +40,39 @@ final class UpdateRouter
                 return;
             }
             if ($context->callbackData === 'premium:plans') {
-                if ($context->callbackId !== null) {
-                    $this->telegram->answerCallbackQuery($context->callbackId, ['text' => 'Premium plans are not available yet.']);
-                }
-                if ($context->userId !== null) {
-                    $this->telegram->sendMessage($this->callbackChatId($update, $context->userId),
-                        '⭐ Premium plan selection is not available yet. Your wallet balance has not changed.');
+                if ($context->callbackId !== null) $this->telegram->answerCallbackQuery($context->callbackId);
+                if ($context->userId !== null) $this->sendPremiumPlans($this->callbackChatId($update, $context->userId));
+                return;
+            }
+            if ($context->callbackData !== null && preg_match('/^premium:plan:([1-9][0-9]{0,15})$/', $context->callbackData, $match)) {
+                if ($context->callbackId !== null) $this->telegram->answerCallbackQuery($context->callbackId);
+                $chatId = $this->callbackChatId($update, (int) $context->userId);
+                $planId = (int) $match[1];
+                $this->telegram->sendMessage($chatId, 'Choose a manual payment method:', [
+                    'reply_markup' => ['inline_keyboard' => [
+                        [
+                            ['text' => 'UPI', 'callback_data' => 'premium:method:' . $planId . ':upi'],
+                            ['text' => 'Crypto', 'callback_data' => 'premium:method:' . $planId . ':crypto'],
+                        ],
+                    ]],
+                ]);
+                return;
+            }
+            if ($context->callbackData !== null && preg_match('/^premium:method:([1-9][0-9]{0,15}):(upi|crypto)$/', $context->callbackData, $match)) {
+                if ($context->callbackId !== null) $this->telegram->answerCallbackQuery($context->callbackId);
+                $chatId = $this->callbackChatId($update, (int) $context->userId);
+                try {
+                    $requestId = $this->premium->createRequest((int) $context->userId, (int) $match[1], $match[2]);
+                    $settingKey = $match[2] === 'upi' ? 'premium_upi_instructions' : 'premium_crypto_instructions';
+                    $instructions = trim((string) $this->settings->get($settingKey, ''));
+                    if ($instructions === '') $instructions = 'Payment instructions have not been configured. Contact the bot owner before paying.';
+                    $this->telegram->sendMessage($chatId,
+                        "⭐ Premium payment request #{$requestId} created (pending admin review).\n"
+                        . "Method: " . strtoupper($match[2]) . "\n\n" . $instructions
+                        . "\n\nAfter paying, submit the transaction reference with:\n/payref {$requestId} YOUR_REFERENCE"
+                        . "\nPremium activates only after the admin verifies and approves your request.");
+                } catch (\Throwable $e) {
+                    $this->telegram->sendMessage($chatId, $e->getMessage());
                 }
                 return;
             }
@@ -78,13 +107,18 @@ final class UpdateRouter
             return;
         }
 
-        if (($command === '/setting' || $command === '/settings') && preg_match('/^set\s+(dump_channel_id|post_channel_id|force_subscribe_channel_id|collection_access_cost|welcome_coins|shortener_reward_coins|shortener_provider_code)\s+(.+)$/i', $argument, $match)) {
+        if (($command === '/setting' || $command === '/settings') && preg_match('/^set\s+(dump_channel_id|post_channel_id|force_subscribe_channel_id|collection_access_cost|welcome_coins|shortener_reward_coins|shortener_provider_code|premium_upi_instructions|premium_crypto_instructions)\s+(.+)$/i', $argument, $match)) {
             if (!$this->requireOwner($context->userId, $context->chatId)) return;
             $key = strtolower($match[1]);
             $value = trim($match[2]);
             if (in_array($key, ['collection_access_cost', 'welcome_coins', 'shortener_reward_coins'], true)) {
                 if (!preg_match('/^(0|[1-9][0-9]{0,8})$/', $value)) {
                     $this->telegram->sendMessage($context->chatId, $key . ' must be a whole number from 0 to 999999999.');
+                    return;
+                }
+            } elseif (in_array($key, ['premium_upi_instructions', 'premium_crypto_instructions'], true)) {
+                if ($value === '' || strlen($value) > 5000) {
+                    $this->telegram->sendMessage($context->chatId, $key . ' must be 1–5000 characters.');
                     return;
                 }
             } elseif ($key === 'shortener_provider_code') {
@@ -99,6 +133,93 @@ final class UpdateRouter
             }
             $this->settings->set($key, $value, $context->userId);
             $this->telegram->sendMessage($context->chatId, '✅ Saved ' . $key . '. Verify the bot has the required channel permissions.');
+            return;
+        }
+
+        if ($command === '/premium') {
+            $this->sendPremiumPlans($context->chatId);
+            return;
+        }
+
+        if ($command === '/payref') {
+            if (!preg_match('/^([1-9][0-9]{0,15})\\s+(.+)$/s', $argument, $match)) {
+                $this->telegram->sendMessage($context->chatId, 'Usage: /payref REQUEST_ID TRANSACTION_REFERENCE');
+                return;
+            }
+            try {
+                $saved = $this->premium->submitReference($context->userId, (int) $match[1], $match[2]);
+                $this->telegram->sendMessage($context->chatId, $saved
+                    ? '✅ Reference saved. Your Premium request is still pending; only admin approval activates Premium.'
+                    : 'Request not found, already reviewed, or it does not belong to your account.');
+            } catch (\Throwable $e) {
+                $this->telegram->sendMessage($context->chatId, $e->getMessage());
+            }
+            return;
+        }
+
+        if ($command === '/premium_plan_add') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            $fields = array_map('trim', explode('|', $argument));
+            if (count($fields) !== 4 || !ctype_digit($fields[1])) {
+                $this->telegram->sendMessage($context->chatId, 'Usage: /premium_plan_add NAME|DAYS|PRICE|CURRENCY');
+                return;
+            }
+            try {
+                $id = $this->premium->createPlan($fields[0], (int) $fields[1], $fields[2], $fields[3]);
+                $this->telegram->sendMessage($context->chatId, '✅ Premium plan #' . $id . ' created.');
+            } catch (\Throwable $e) {
+                $this->telegram->sendMessage($context->chatId, $e->getMessage());
+            }
+            return;
+        }
+
+        if ($command === '/premium_plan_disable') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            if (!ctype_digit($argument) || (int) $argument < 1) {
+                $this->telegram->sendMessage($context->chatId, 'Usage: /premium_plan_disable PLAN_ID');
+                return;
+            }
+            $this->telegram->sendMessage($context->chatId,
+                $this->premium->disablePlan((int) $argument) ? 'Plan disabled for future purchases.' : 'No enabled plan found with that ID.');
+            return;
+        }
+
+        if ($command === '/premium_pending') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            $pending = $this->premium->pendingRequests();
+            if ($pending === []) {
+                $this->telegram->sendMessage($context->chatId, 'No pending Premium payment requests.');
+                return;
+            }
+            $lines = ['Pending Premium requests:'];
+            foreach ($pending as $request) {
+                $lines[] = '#' . $request['id'] . ' | user ' . $request['telegram_user_id'] . ' | '
+                    . $request['plan_name_snapshot'] . ' (' . $request['duration_days_snapshot'] . ' days) | '
+                    . $request['price_amount_snapshot'] . ' ' . $request['currency_snapshot'] . ' | '
+                    . strtoupper((string) $request['payment_method']) . ' | reference: '
+                    . ((string) ($request['transaction_reference'] ?? '') ?: '[not submitted]');
+            }
+            $lines[] = '';
+            $lines[] = '/premium_approve REQUEST_ID';
+            $lines[] = '/premium_reject REQUEST_ID';
+            $this->telegram->sendMessage($context->chatId, implode("\n", $lines));
+            return;
+        }
+
+        if ($command === '/premium_approve' || $command === '/premium_reject') {
+            if (!$this->requireOwner($context->userId, $context->chatId)) return;
+            if (!ctype_digit($argument) || (int) $argument < 1) {
+                $this->telegram->sendMessage($context->chatId, 'Usage: ' . $command . ' REQUEST_ID');
+                return;
+            }
+            try {
+                $done = $this->premium->decide((int) $argument, $context->userId, $command === '/premium_approve');
+                $this->telegram->sendMessage($context->chatId, $done
+                    ? ($command === '/premium_approve' ? '✅ Request approved and Premium activated/extended.' : 'Request rejected.')
+                    : 'Request not found or already reviewed.');
+            } catch (\Throwable $e) {
+                $this->telegram->sendMessage($context->chatId, $e->getMessage());
+            }
             return;
         }
 
@@ -158,6 +279,8 @@ final class UpdateRouter
             $lines[] = '/setting set welcome_coins 10';
             $lines[] = '/setting set shortener_provider_code gplinks';
             $lines[] = '/setting set shortener_reward_coins 20';
+            $lines[] = '/setting set premium_upi_instructions YOUR_UPI_ID_AND_PAYMENT_STEPS';
+            $lines[] = '/setting set premium_crypto_instructions NETWORK_AND_WALLET_ADDRESS';
             $this->telegram->sendMessage($context->chatId, implode("\n", $lines));
             return;
         }
@@ -169,6 +292,27 @@ final class UpdateRouter
 
         // Wizard messages are handled last so /help and /settings remain usable mid-draft.
         $this->postWizard->handleMessage($update, $context->userId, $context->chatId, $context->text);
+    }
+
+
+    private function sendPremiumPlans(int $chatId): void
+    {
+        $plans = $this->premium->plans();
+        if ($plans === []) {
+            $this->telegram->sendMessage($chatId, 'No Premium plans are available yet. Please check back later.');
+            return;
+        }
+        $keyboard = [];
+        foreach ($plans as $plan) {
+            $keyboard[] = [[
+                'text' => (string) $plan['name'] . ' — ' . (int) $plan['duration_days'] . ' days — '
+                    . $plan['price_amount'] . ' ' . $plan['currency'],
+                'callback_data' => 'premium:plan:' . (int) $plan['id'],
+            ]];
+        }
+        $this->telegram->sendMessage($chatId, '⭐ Premium plans\n\nChoose a plan. Payments are manual; an admin must verify and approve them.', [
+            'reply_markup' => ['inline_keyboard' => $keyboard],
+        ]);
     }
 
     /** @param array<string, mixed> $update */

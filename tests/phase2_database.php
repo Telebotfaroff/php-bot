@@ -7,6 +7,7 @@ use App\Database\MigrationRunner;
 use App\Database\UpdateProcessor;
 use App\Database\SettingsRepository;
 use App\Services\WalletService;
+use App\Services\PremiumService;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
 
@@ -23,7 +24,7 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 6, 'applies all migrations present on first run');
+check(count($firstRun) === 7, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
 
 foreach ([
@@ -35,6 +36,8 @@ foreach ([
     'collection_delivery_items',
     'delivery_outgoing_messages',
     'wallet_verification_tasks',
+    'premium_plans',
+    'premium_payment_requests',
 ] as $table) {
     $tableCheck = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table'
@@ -103,5 +106,19 @@ check($wallet->balance($walletUser) === 25, 'does not credit unverified task');
 check($wallet->creditVerifiedTask($task['token'], 'testprovider'), 'credits task after trusted provider verification');
 check(!$wallet->creditVerifiedTask($task['token'], 'testprovider'), 'does not credit repeated verification callback');
 check($wallet->balance($walletUser) === 35, 'wallet balance reflects exactly one verified reward');
+
+
+$premium = new PremiumService($pdo);
+$planId = $premium->createPlan('Test Premium', 30, '49.00', 'INR');
+check($planId > 0, 'creates a Premium plan');
+$paymentUser = random_int(600000000, 699999999);
+$requestId = $premium->createRequest($paymentUser, $planId, 'upi');
+check($requestId > 0, 'creates a pending manual payment request');
+check($premium->submitReference($paymentUser, $requestId, 'TEST-TXN-123'), 'stores a user transaction reference');
+check($premium->decide($requestId, 123456, true), 'admin approval activates Premium');
+$sub = $pdo->prepare("SELECT COUNT(*) FROM premium_subscriptions WHERE telegram_user_id = :user AND status = 'active' AND expires_at > CURRENT_TIMESTAMP");
+$sub->execute(['user' => $paymentUser]);
+check((int) $sub->fetchColumn() === 1, 'approved request creates an active subscription');
+check(!$premium->decide($requestId, 123456, true), 'duplicate approval cannot grant duplicate Premium');
 
 echo 'Phase 2 database tests passed.' . PHP_EOL;

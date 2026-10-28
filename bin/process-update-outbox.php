@@ -9,6 +9,7 @@ use App\Security\AdminAuthorizer;
 use App\Telegram\BotApiClient;
 use App\Telegram\UpdateRouter;
 use App\Support\Logger;
+use App\Services\PostWizardService;
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -19,11 +20,10 @@ require dirname(__DIR__) . '/src/Bootstrap.php';
 
 try {
     $pdo = Connection::make();
-    $router = new UpdateRouter(
-        new BotApiClient(),
-        new SettingsRepository($pdo),
-        new AdminAuthorizer()
-    );
+    $telegram = new BotApiClient();
+    $settings = new SettingsRepository($pdo);
+    $wizard = new PostWizardService($pdo, $telegram, $settings);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard);
     $completed = (new UpdateOutbox($pdo, $router))->dispatchDue(25);
     fwrite(STDOUT, 'Outbox jobs completed: ' . $completed . PHP_EOL);
 } catch (Throwable $exception) {

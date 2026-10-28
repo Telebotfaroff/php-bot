@@ -32,6 +32,10 @@ final class UpdateRouter
         $context = UpdateContext::from($update);
 
         if ($context->isCallback) {
+            if ($context->callbackData !== null && str_starts_with($context->callbackData, 'admin:')) {
+                $this->handleAdminCallback($update, $context);
+                return;
+            }
             if ($context->callbackData === 'wallet:get_coins') {
                 if ($context->callbackId !== null) {
                     $this->telegram->answerCallbackQuery($context->callbackId, ['text' => 'Coin verification provider is not configured yet.']);
@@ -103,6 +107,33 @@ final class UpdateRouter
         $rawCommand = is_array($parts) ? ($parts[0] ?? '') : '';
         $command = strtolower((string) preg_replace('/@\w+$/', '', $rawCommand));
         $argument = is_array($parts) ? trim((string) ($parts[1] ?? '')) : '';
+
+        // Complete a setting edit started from the inline admin menu.
+        $pendingKey = 'admin_pending_' . $context->userId;
+        $pendingSetting = (string) $this->settings->get($pendingKey, '');
+        if ($pendingSetting !== '' && $context->text !== null && !str_starts_with(trim($context->text), '/')) {
+            if (!$this->admin->isOwner($context->userId)) {
+                $this->settings->set($pendingKey, '');
+                $this->telegram->sendMessage($context->chatId, '⛔ This admin action is no longer available.');
+                return;
+            }
+            try {
+                $value = $this->validateAdminSettingValue($pendingSetting, trim($context->text));
+                $this->settings->set($pendingSetting, $value, $context->userId);
+                $this->settings->set($pendingKey, '');
+                $this->telegram->sendMessage($context->chatId, '✅ Saved ' . $this->adminSettingLabel($pendingSetting) . '.');
+            } catch (\\InvalidArgumentException $exception) {
+                $this->telegram->sendMessage($context->chatId, $exception->getMessage() . "\\nSend the value again, or use /cancel to leave edit mode.");
+            }
+            return;
+        }
+        if ($pendingSetting !== '' && in_array($command, ['/cancel', '/setting', '/settings'], true)) {
+            $this->settings->set($pendingKey, '');
+            if ($command === '/cancel') {
+                $this->telegram->sendMessage($context->chatId, 'Setting edit cancelled.');
+                return;
+            }
+        }
 
         if ($command === '/post') {
             if (!$this->requireOwner($context->userId, $context->chatId)) return;
@@ -294,31 +325,7 @@ final class UpdateRouter
 
         if ($command === '/settings' || $command === '/setting') {
             if (!$this->requireOwner($context->userId, $context->chatId)) return;
-            $current = $this->settings->all();
-            $lines = ['⚙️ Bot Settings', ''];
-            if ($current === []) {
-                $lines[] = 'No settings have been saved yet.';
-            } else {
-                foreach ($current as $key => $value) {
-                    $safeValue = preg_match('/token|secret|password|address|upi|crypto/i', $key)
-                        ? '[hidden]' : (function_exists('mb_substr') ? mb_substr($value, 0, 160) : substr($value, 0, 160));
-                    $lines[] = $key . ': ' . $safeValue;
-                }
-            }
-            $lines[] = '';
-            $lines[] = 'Editable settings:';
-            $lines[] = '/setting set dump_channel_id -1001234567890';
-            $lines[] = '/setting set post_channel_id -1001234567890';
-            $lines[] = '/setting set force_subscribe_channel_id @channelname';
-            $lines[] = '/setting set collection_access_cost 0';
-            $lines[] = '/setting set welcome_coins 10';
-            $lines[] = '/setting set shortener_provider_code gplinks';
-            $lines[] = '/setting set shortener_reward_coins 20';
-            $lines[] = '/setting set auto_delete_enabled true';
-            $lines[] = '/setting set auto_delete_after_seconds 86400';
-            $lines[] = '/setting set premium_upi_instructions YOUR_UPI_ID_AND_PAYMENT_STEPS';
-            $lines[] = '/setting set premium_crypto_instructions NETWORK_AND_WALLET_ADDRESS';
-            $this->telegram->sendMessage($context->chatId, implode("\n", $lines));
+            $this->sendAdminMenu($context->chatId);
             return;
         }
 
@@ -331,6 +338,162 @@ final class UpdateRouter
         $this->postWizard->handleMessage($update, $context->userId, $context->chatId, $context->text);
     }
 
+ 
+    /** @param array<string, mixed> $update */
+    private function handleAdminCallback(array $update, UpdateContext $context): void
+    {
+        $chatId = $this->callbackChatId($update, $context->userId ?? 0);
+        if ($context->userId === null || !$this->admin->isOwner($context->userId)) {
+            if ($context->callbackId !== null) $this->telegram->answerCallbackQuery($context->callbackId, ['text' => 'Owner only.']);
+            return;
+        }
+        if ($context->callbackId !== null) $this->telegram->answerCallbackQuery($context->callbackId);
+
+        $data = (string) $context->callbackData;
+        if ($data === 'admin:menu' || $data === 'admin:home') {
+            $this->sendAdminMenu($chatId);
+            return;
+        }
+        if ($data === 'admin:cancel') {
+            $this->settings->set('admin_pending_' . $context->userId, '');
+            $this->telegram->sendMessage($chatId, 'Setting edit cancelled.');
+            $this->sendAdminMenu($chatId);
+            return;
+        }
+        if (preg_match('/^admin:cat:(channels|access|wallet|shortener|premium|cleanup)$/', $data, $match)) {
+            $this->sendAdminCategory($chatId, $match[1]);
+            return;
+        }
+        if (preg_match('/^admin:toggle:(auto_delete_enabled)$/', $data, $match)) {
+            $key = $match[1];
+            $current = strtolower((string) $this->settings->get($key, 'false'));
+            $next = in_array($current, ['1', 'true', 'on'], true) ? '0' : '1';
+            $this->settings->set($key, $next, $context->userId);
+            $this->sendAdminCategory($chatId, 'cleanup');
+            return;
+        }
+        if (preg_match('/^admin:edit:([a-z][a-z0-9_]{1,60})$/', $data, $match)) {
+            $key = $match[1];
+            $allowed = array_column($this->adminSettingDefinitions(), 'key');
+            if (!in_array($key, $allowed, true)) {
+                $this->telegram->sendMessage($chatId, 'Unknown setting. Open /setting and try again.');
+                return;
+            }
+            $this->settings->set('admin_pending_' . $context->userId, $key);
+            $hint = match ($key) {
+                'dump_channel_id', 'post_channel_id' => 'Send the channel ID (usually starts with -100), or a public @channelusername.',
+                'force_subscribe_channel_id' => 'Send a channel ID such as -1001234567890 or a public @channelusername. Send 0 to disable.',
+                'collection_access_cost', 'welcome_coins', 'shortener_reward_coins' => 'Send a whole number (0 or greater).',
+                'shortener_provider_code' => 'Send a provider key such as gplinks (letters, numbers, _ and - only).',
+                'auto_delete_after_seconds' => 'Send the delay in seconds (minimum 60, maximum 31536000).',
+                'premium_upi_instructions' => 'Send the UPI payment instructions users should see.',
+                'premium_crypto_instructions' => 'Send the crypto network and wallet instructions users should see.',
+                default => 'Send the new value.',
+            };
+            $this->telegram->sendMessage($chatId, '✏️ Edit ' . $this->adminSettingLabel($key) . "\\n\\n" . $hint . "\\n\\nSend /cancel to cancel.");
+            return;
+        }
+        $this->sendAdminMenu($chatId);
+    }
+
+    private function sendAdminMenu(int $chatId): void
+    {
+        $keyboard = [
+            [['text' => '📢 Channels', 'callback_data' => 'admin:cat:channels'], ['text' => '🔐 Access', 'callback_data' => 'admin:cat:access']],
+            [['text' => '🪙 Wallet & Rewards', 'callback_data' => 'admin:cat:wallet'], ['text' => '🔗 Shortener', 'callback_data' => 'admin:cat:shortener']],
+            [['text' => '⭐ Premium & Payments', 'callback_data' => 'admin:cat:premium'], ['text' => '🗑 Auto-delete', 'callback_data' => 'admin:cat:cleanup']],
+        ];
+        $this->telegram->sendMessage($chatId, "⚙️ File Store Admin Panel\\n\\nChoose a section below. Tap a setting to edit it; auto-delete can be toggled with one tap.", [
+            'reply_markup' => ['inline_keyboard' => $keyboard],
+        ]);
+    }
+
+    private function sendAdminCategory(int $chatId, string $category): void
+    {
+        $definitions = $this->adminSettingDefinitions();
+        $keyboard = [];
+        foreach ($definitions as $definition) {
+            if ($definition['category'] !== $category) continue;
+            $key = $definition['key'];
+            $value = (string) $this->settings->get($key, '');
+            if ($key === 'auto_delete_enabled') {
+                $enabled = in_array(strtolower($value), ['1', 'true', 'on'], true);
+                $keyboard[] = [['text' => ($enabled ? '🟢 Auto-delete: ON' : '⚪ Auto-delete: OFF'), 'callback_data' => 'admin:toggle:auto_delete_enabled']];
+                continue;
+            }
+            $display = $value === '' ? 'Not set' : (function_exists('mb_substr') ? mb_substr($value, 0, 24) : substr($value, 0, 24));
+            if (preg_match('/upi|crypto|password|token|secret/i', $key)) $display = $value === '' ? 'Not set' : 'Configured';
+            $keyboard[] = [['text' => $definition['label'] . ': ' . $display, 'callback_data' => 'admin:edit:' . $key]];
+        }
+        $keyboard[] = [['text' => '⬅️ Back to Admin Panel', 'callback_data' => 'admin:menu']];
+        $title = match ($category) {
+            'channels' => '📢 Channel Settings',
+            'access' => '🔐 Access Control',
+            'wallet' => '🪙 Wallet & Rewards',
+            'shortener' => '🔗 Shortener Settings',
+            'premium' => '⭐ Premium & Payments',
+            'cleanup' => '🗑 Auto-delete Settings',
+            default => '⚙️ Settings',
+        };
+        $this->telegram->sendMessage($chatId, $title . "\\n\\nTap an item to edit it.", [
+            'reply_markup' => ['inline_keyboard' => $keyboard],
+        ]);
+    }
+
+    /** @return list<array{key:string,label:string,category:string}> */
+    private function adminSettingDefinitions(): array
+    {
+        return [
+            ['key' => 'dump_channel_id', 'label' => 'Dump channel', 'category' => 'channels'],
+            ['key' => 'post_channel_id', 'label' => 'Post channel', 'category' => 'channels'],
+            ['key' => 'force_subscribe_channel_id', 'label' => 'Force-subscribe channel', 'category' => 'channels'],
+            ['key' => 'collection_access_cost', 'label' => 'Collection access cost', 'category' => 'access'],
+            ['key' => 'welcome_coins', 'label' => 'Welcome coins', 'category' => 'wallet'],
+            ['key' => 'shortener_reward_coins', 'label' => 'Shortener reward coins', 'category' => 'wallet'],
+            ['key' => 'shortener_provider_code', 'label' => 'Shortener provider', 'category' => 'shortener'],
+            ['key' => 'premium_upi_instructions', 'label' => 'UPI instructions', 'category' => 'premium'],
+            ['key' => 'premium_crypto_instructions', 'label' => 'Crypto instructions', 'category' => 'premium'],
+            ['key' => 'auto_delete_enabled', 'label' => 'Auto-delete', 'category' => 'cleanup'],
+            ['key' => 'auto_delete_after_seconds', 'label' => 'Auto-delete delay (seconds)', 'category' => 'cleanup'],
+        ];
+    }
+
+    private function adminSettingLabel(string $key): string
+    {
+        foreach ($this->adminSettingDefinitions() as $definition) {
+            if ($definition['key'] === $key) return $definition['label'];
+        }
+        return $key;
+    }
+
+    private function validateAdminSettingValue(string $key, string $value): string
+    {
+        if ($value === '') throw new InvalidArgumentException('Value cannot be empty.');
+        if (in_array($key, ['dump_channel_id', 'post_channel_id', 'force_subscribe_channel_id'], true)) {
+            if ($key === 'force_subscribe_channel_id' && $value === '0') return '0';
+            if (!preg_match('/^(?:-?[0-9]{5,}|@[A-Za-z][A-Za-z0-9_]{4,})$/', $value)) {
+                throw new InvalidArgumentException('Use a numeric channel ID (usually -100...) or a public @channelusername.');
+            }
+            return $value;
+        }
+        if (in_array($key, ['collection_access_cost', 'welcome_coins', 'shortener_reward_coins'], true)) {
+            if (!preg_match('/^(0|[1-9][0-9]{0,8})$/', $value)) throw new InvalidArgumentException('Enter a whole number from 0 to 999999999.');
+            return $value;
+        }
+        if ($key === 'shortener_provider_code') {
+            if (!preg_match('/^[a-z][a-z0-9_-]{1,39}$/i', $value)) throw new InvalidArgumentException('Use a provider key such as gplinks (letters, numbers, _ and - only).');
+            return strtolower($value);
+        }
+        if ($key === 'auto_delete_after_seconds') {
+            if (!ctype_digit($value) || (int) $value < 60 || (int) $value > 31536000) throw new InvalidArgumentException('Enter a delay between 60 and 31531536000 seconds.');
+            return $value;
+        }
+        if (in_array($key, ['premium_upi_instructions', 'premium_crypto_instructions'], true)) {
+            if (strlen($value) > 5000) throw new InvalidArgumentException('Instructions must be at most 5000 characters.');
+            return $value;
+        }
+        throw new InvalidArgumentException('That setting cannot be edited from this menu.');
+    }
 
     private function sendPremiumPlans(int $chatId): void
     {

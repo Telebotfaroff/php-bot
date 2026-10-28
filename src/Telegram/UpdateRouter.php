@@ -123,7 +123,7 @@ final class UpdateRouter
                 $this->settings->set($pendingSetting, $value, $context->userId);
                 $this->settings->set($pendingKey, '');
                 $this->telegram->sendMessage($context->chatId, '✅ Saved ' . $this->adminSettingLabel($pendingSetting) . '.');
-            } catch (\\InvalidArgumentException $exception) {
+            } catch (\InvalidArgumentException $exception) {
                 $this->telegram->sendMessage($context->chatId, $exception->getMessage() . "\nSend the value again, or use /cancel to leave edit mode.");
             }
             return;
@@ -469,31 +469,31 @@ final class UpdateRouter
 
     private function validateAdminSettingValue(string $key, string $value): string
     {
-        if ($value === '') throw new \\InvalidArgumentException('Value cannot be empty.');
+        if ($value === '') throw new \InvalidArgumentException('Value cannot be empty.');
         if (in_array($key, ['dump_channel_id', 'post_channel_id', 'force_subscribe_channel_id'], true)) {
             if ($key === 'force_subscribe_channel_id' && $value === '0') return '0';
             if (!preg_match('/^(?:-?[0-9]{5,}|@[A-Za-z][A-Za-z0-9_]{4,})$/', $value)) {
-                throw new InvalidArgumentException('Use a numeric channel ID (usually -100...) or a public @channelusername.');
+                throw new \InvalidArgumentException('Use a numeric channel ID (usually -100...) or a public @channelusername.');
             }
             return $value;
         }
         if (in_array($key, ['collection_access_cost', 'welcome_coins', 'shortener_reward_coins'], true)) {
-            if (!preg_match('/^(0|[1-9][0-9]{0,8})$/', $value)) throw new InvalidArgumentException('Enter a whole number from 0 to 999999999.');
+            if (!preg_match('/^(0|[1-9][0-9]{0,8})$/', $value)) throw new \InvalidArgumentException('Enter a whole number from 0 to 999999999.');
             return $value;
         }
         if ($key === 'shortener_provider_code') {
-            if (!preg_match('/^[a-z][a-z0-9_-]{1,39}$/i', $value)) throw new InvalidArgumentException('Use a provider key such as gplinks (letters, numbers, _ and - only).');
+            if (!preg_match('/^[a-z][a-z0-9_-]{1,39}$/i', $value)) throw new \InvalidArgumentException('Use a provider key such as gplinks (letters, numbers, _ and - only).');
             return strtolower($value);
         }
         if ($key === 'auto_delete_after_seconds') {
-            if (!ctype_digit($value) || (int) $value < 60 || (int) $value > 31536000) throw new InvalidArgumentException('Enter a delay between 60 and 31536000 seconds.');
+            if (!ctype_digit($value) || (int) $value < 60 || (int) $value > 31536000) throw new \InvalidArgumentException('Enter a delay between 60 and 31536000 seconds.');
             return $value;
         }
         if (in_array($key, ['premium_upi_instructions', 'premium_crypto_instructions'], true)) {
-            if (strlen($value) > 5000) throw new InvalidArgumentException('Instructions must be at most 5000 characters.');
+            if (strlen($value) > 5000) throw new \InvalidArgumentException('Instructions must be at most 5000 characters.');
             return $value;
         }
-        throw new InvalidArgumentException('That setting cannot be edited from this menu.');
+        throw new \InvalidArgumentException('That setting cannot be edited from this menu.');
     }
 
     private function sendPremiumPlans(int $chatId): void

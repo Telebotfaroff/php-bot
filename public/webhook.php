@@ -39,7 +39,9 @@ try {
     }
 
     $update = json_decode($rawBody, true);
-    if (!is_array($update) || !isset($update['update_id']) || !is_numeric($update['update_id'])) {
+    if (!is_array($update) || filter_var($update['update_id'] ?? null, FILTER_VALIDATE_INT) === false
+        || filter_var($update['update_id'] ?? null, FILTER_VALIDATE_INT) === null
+        || (int) $update['update_id'] < 0) {
         http_response_code(400);
         echo json_encode(['ok' => false, 'error' => 'Invalid Telegram update']);
         exit;

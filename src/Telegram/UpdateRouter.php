@@ -110,11 +110,22 @@ final class UpdateRouter
             return;
         }
 
-        if (($command === '/setting' || $command === '/settings') && preg_match('/^set\s+(dump_channel_id|post_channel_id|force_subscribe_channel_id|collection_access_cost|welcome_coins|shortener_reward_coins|shortener_provider_code|premium_upi_instructions|premium_crypto_instructions)\s+(.+)$/i', $argument, $match)) {
+        if (($command === '/setting' || $command === '/settings') && preg_match('/^set\s+(dump_channel_id|post_channel_id|force_subscribe_channel_id|collection_access_cost|welcome_coins|shortener_reward_coins|shortener_provider_code|premium_upi_instructions|premium_crypto_instructions|auto_delete_enabled|auto_delete_after_seconds)\s+(.+)$/i', $argument, $match)) {
             if (!$this->requireOwner($context->userId, $context->chatId)) return;
             $key = strtolower($match[1]);
             $value = trim($match[2]);
-            if (in_array($key, ['collection_access_cost', 'welcome_coins', 'shortener_reward_coins'], true)) {
+            if ($key === 'auto_delete_enabled') {
+                if (!in_array(strtolower($value), ['0', '1', 'true', 'false', 'on', 'off'], true)) {
+                    $this->telegram->sendMessage($context->chatId, 'auto_delete_enabled must be true or false.');
+                    return;
+                }
+                $value = in_array(strtolower($value), ['1', 'true', 'on'], true) ? '1' : '0';
+            } elseif ($key === 'auto_delete_after_seconds') {
+                if (!ctype_digit($value) || (int) $value < 60 || (int) $value > 31536000) {
+                    $this->telegram->sendMessage($context->chatId, 'auto_delete_after_seconds must be between 60 and 31536000.');
+                    return;
+                }
+            } elseif (in_array($key, ['collection_access_cost', 'welcome_coins', 'shortener_reward_coins'], true)) {
                 if (!preg_match('/^(0|[1-9][0-9]{0,8})$/', $value)) {
                     $this->telegram->sendMessage($context->chatId, $key . ' must be a whole number from 0 to 999999999.');
                     return;
@@ -303,6 +314,8 @@ final class UpdateRouter
             $lines[] = '/setting set welcome_coins 10';
             $lines[] = '/setting set shortener_provider_code gplinks';
             $lines[] = '/setting set shortener_reward_coins 20';
+            $lines[] = '/setting set auto_delete_enabled true';
+            $lines[] = '/setting set auto_delete_after_seconds 86400';
             $lines[] = '/setting set premium_upi_instructions YOUR_UPI_ID_AND_PAYMENT_STEPS';
             $lines[] = '/setting set premium_crypto_instructions NETWORK_AND_WALLET_ADDRESS';
             $this->telegram->sendMessage($context->chatId, implode("\n", $lines));

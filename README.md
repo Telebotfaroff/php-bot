@@ -160,3 +160,8 @@ A cPanel setup wizard is available at `public/install.php`. Deploy the project s
 The wizard validates the PHP runtime/extensions, checks the Telegram token and username, connects to MySQL, applies migrations, writes the config with restrictive file permissions, and registers the webhook. The generated config is stored at `../private/php-bot-config.php` relative to the project directory and is loaded automatically by the application when `BOT_CONFIG_FILE` is not set.
 
 **Security:** Use HTTPS only. After successful setup, immediately remove `public/install.php` from the server. Keep the generated config and logs outside the public web root. If webhook registration fails after the config is saved, run `php bin/set-webhook.php` from CLI; the default private config path is automatically detected. Then configure the cron workers as described above.
+
+
+## Koyeb deployment
+
+A Docker deployment setup for Koyeb is available on the `deploy/koyeb` branch. See [docs/KOYEB.md](docs/KOYEB.md) for environment variables, database migration, webhook registration, health checks, and worker behavior. The container serves the webhook on port 8080 and runs the outbox and auto-delete workers under Supervisor. Use an external MySQL/MariaDB database; PostgreSQL is not compatible with the current migrations. The Koyeb container intentionally blocks the cPanel web installer because deployment secrets should be configured as environment variables.

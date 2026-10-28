@@ -168,7 +168,7 @@ final class UpdateRouter
                     $filename,
                     '🔐 Logical backup created. Sensitive bot settings are excluded. Store this file privately.'
                 );
-            } catch (\\Throwable $exception) {
+            } catch (\Throwable $exception) {
                 $this->telegram->sendMessage($context->chatId, 'Backup failed safely. Check the private application logs and database size/configuration.');
             } finally {
                 if (is_string($path) && is_file($path)) {

@@ -20,7 +20,8 @@ final class UpdateRouter
         private readonly PostWizardService $postWizard,
         private readonly CollectionDeliveryService $collectionDelivery,
         private readonly WalletService $wallet,
-        private readonly PremiumService $premium
+        private readonly PremiumService $premium,
+        private readonly ReferralService $referrals
     ) {}
 
     /** @param array<string, mixed> $update */
@@ -224,7 +225,12 @@ final class UpdateRouter
         }
 
         if ($command === '/start') {
-            if ($argument !== '') {
+            $referrerId = null;
+            if (preg_match('/^ref_([1-9][0-9]{0,15})$/', $argument, $refMatch)) {
+                $referrerId = (int) $refMatch[1];
+            }
+            $referralResult = $this->referrals->processStart($context->userId, $referrerId);
+            if ($argument !== '' && $referrerId === null) {
                 $this->collectionDelivery->open($context->chatId, $context->userId, $context->updateId, $argument);
                 return;
             }
@@ -238,8 +244,24 @@ final class UpdateRouter
                 $context->chatId,
                 'Hey ' . $name . "! 👋\n\nWelcome to the File Store Bot.\nWallet balance: " . $balance . " coins."
                     . ($welcomeCoins > 0 ? "\nYour one-time welcome reward is handled automatically." : '')
-                    . "\nUse /balance to check your wallet, or /help for commands."
+                    . ($referralResult['rewarded'] ? "\n🎉 Your referral was successful! The referrer received 24 hours of Premium." : '')
+                    . "\nUse /referral to invite friends, /balance to check your wallet, or /help for commands."
             );
+            return;
+        }
+
+        if ($command === '/referral') {
+            $username = trim((string) Config::get('BOT_USERNAME', ''));
+            if ($username === '') {
+                $this->telegram->sendMessage($context->chatId, 'Referral links are unavailable until BOT_USERNAME is configured in the private server config.');
+                return;
+            }
+            $stats = $this->referrals->stats($context->userId);
+            $link = 'https://t.me/' . ltrim($username, '@') . '?start=ref_' . $context->userId;
+            $this->telegram->sendMessage($context->chatId,
+                "🎁 Invite friends and earn 24 hours of Premium for each new user who starts the bot with your link.\n\n"
+                . "Your referral link:\n" . $link . "\n\n"
+                . "Qualified referrals: " . $stats['qualified'] . "\nPremium rewards issued: " . $stats['rewards']);
             return;
         }
 
@@ -252,7 +274,7 @@ final class UpdateRouter
         if ($command === '/help') {
             $this->telegram->sendMessage(
                 $context->chatId,
-                "Available commands:\n/start — Start the bot\n/balance — Check wallet balance\n/help — Show help\n/id — Show your Telegram user ID\n/post — Start an admin collection draft\n/done — Preview videos collected in the current draft\n/cancel — Cancel the current draft\n/skip — Skip optional thumbnail\n/setting set dump_channel_id CHANNEL_ID\n/setting set post_channel_id CHANNEL_ID\n/setting set force_subscribe_channel_id CHANNEL_ID\n/setting set collection_access_cost 0\n/setting set welcome_coins 10"
+                "Available commands:\n/start — Start the bot\n/referral — Get your referral link and stats\n/balance — Check wallet balance\n/help — Show help\n/id — Show your Telegram user ID\n/post — Start an admin collection draft\n/done — Preview videos collected in the current draft\n/cancel — Cancel the current draft\n/skip — Skip optional thumbnail\n/setting set dump_channel_id CHANNEL_ID\n/setting set post_channel_id CHANNEL_ID\n/setting set force_subscribe_channel_id CHANNEL_ID\n/setting set collection_access_cost 0\n/setting set welcome_coins 10"
             );
             return;
         }

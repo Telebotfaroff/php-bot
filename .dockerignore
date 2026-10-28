@@ -1,0 +1,7 @@
+.git
+.github
+.env
+.env.*
+private/
+*.log
+.DS_Store

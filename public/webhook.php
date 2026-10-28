@@ -9,10 +9,11 @@ use App\Database\UpdateOutbox;
 use App\Database\UpdateProcessor;
 use App\Security\AdminAuthorizer;
 use App\Security\WebhookVerifier;
+use App\Services\CollectionDeliveryService;
+use App\Services\PostWizardService;
+use App\Support\Logger;
 use App\Telegram\BotApiClient;
 use App\Telegram\UpdateRouter;
-use App\Support\Logger;
-use App\Services\PostWizardService;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
 
@@ -57,11 +58,11 @@ try {
     $isNewUpdate = $processor->process($update);
 
     // Always retry the durable job, including when Telegram redelivers a duplicate update.
-    // Once the update is committed to the outbox, a Telegram API failure must not lose it.
     $telegram = new BotApiClient();
     $settings = new SettingsRepository($pdo);
     $wizard = new PostWizardService($pdo, $telegram, $settings);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard);
+    $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
+    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery);
     $outbox = new UpdateOutbox($pdo, $router);
     $dispatched = $outbox->dispatchOne((int) $updateId);
 
@@ -74,7 +75,6 @@ try {
     http_response_code(200);
     echo json_encode(['ok' => true]);
 } catch (Throwable $exception) {
-    // Return non-2xx only when the update could not be safely accepted/stored.
     Logger::exception('Webhook could not persist Telegram update', $exception);
     http_response_code(503);
     echo json_encode(['ok' => false, 'error' => 'Service unavailable']);

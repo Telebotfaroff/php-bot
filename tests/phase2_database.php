@@ -24,7 +24,7 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 7, 'applies all migrations present on first run');
+check(count($firstRun) === 8, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
 
 foreach ([
@@ -38,6 +38,8 @@ foreach ([
     'wallet_verification_tasks',
     'premium_plans',
     'premium_payment_requests',
+    'referral_attributions',
+    'referral_rewards',
 ] as $table) {
     $tableCheck = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table'
@@ -120,5 +122,28 @@ $sub = $pdo->prepare("SELECT COUNT(*) FROM premium_subscriptions WHERE telegram_
 $sub->execute(['user' => $paymentUser]);
 check((int) $sub->fetchColumn() === 1, 'approved request creates an active subscription');
 check(!$premium->decide($requestId, 123456, true), 'duplicate approval cannot grant duplicate Premium');
+
+
+$referrals = new ReferralService($pdo);
+$referrerId = random_int(500000000, 549999999);
+$referredId = random_int(550000000, 599999999);
+foreach ([[$referrerId, 'Referral Owner'], [$referredId, 'Referral Guest']] as [$id, $firstName]) {
+    $processor->process([
+        'update_id' => random_int(1000000000, 1999999999),
+        'message' => ['from' => ['id' => $id, 'is_bot' => false, 'first_name' => $firstName]],
+    ]);
+}
+$referrals->processStart($referrerId, null);
+$qualified = $referrals->processStart($referredId, $referrerId);
+check($qualified['is_new'] && $qualified['rewarded'], 'qualifies a new user referral');
+$premiumCheck = $pdo->prepare("SELECT COUNT(*) FROM premium_subscriptions WHERE telegram_user_id = :user AND status = 'active' AND expires_at > DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 23 HOUR)");
+$premiumCheck->execute(['user' => $referrerId]);
+check((int) $premiumCheck->fetchColumn() === 1, 'referral reward grants approximately 24 hours of Premium');
+$repeat = $referrals->processStart($referredId, $referrerId);
+check(!$repeat['is_new'] && !$repeat['rewarded'], 'repeat start does not issue another referral reward');
+$self = $referrals->processStart(random_int(200000000, 299999999), $referrerId);
+check(!$self['rewarded'], 'start without referral does not issue a referral reward');
+$stats = $referrals->stats($referrerId);
+check($stats['qualified'] === 1 && $stats['rewards'] === 1, 'referral stats count the reward exactly once');
 
 echo 'Phase 2 database tests passed.' . PHP_EOL;

@@ -35,6 +35,7 @@ final class Config
             'BOT_TOKEN', 'BOT_USERNAME', 'BOT_OWNER_ID', 'WEBHOOK_SECRET', 'SHORTENER_CALLBACK_SECRET',
             'WEBHOOK_URL', 'APP_ENV', 'LOG_FILE', 'TELEGRAM_API_BASE',
             'DB_DSN', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_CHARSET',
+            'DB_SSL_MODE', 'DB_SSL_CA', 'AUTO_MIGRATE',
         ];
         $environment = [];
         foreach ($keys as $key) {

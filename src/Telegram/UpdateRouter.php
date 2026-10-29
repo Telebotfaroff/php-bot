@@ -55,7 +55,7 @@ final class UpdateRouter
                     $pdo = Connection::make();
                     $query = $pdo->prepare("SELECT id, backup_json, expires_at FROM bot_backup_staging WHERE id = :id AND owner_user_id = :owner AND status = 'pending' LIMIT 1");
                     $query->execute(['id' => (int) $backupMatch[2], 'owner' => $context->userId]);
-                    $staged = $query->fetch(\\PDO::FETCH_ASSOC);
+                    $staged = $query->fetch(\PDO::FETCH_ASSOC);
                     if (!is_array($staged) || strtotime((string) $staged['expires_at']) <= time()) {
                         $this->telegram->sendMessage($chatId, 'This restore preview has expired. Upload the backup again.');
                         return;
@@ -72,7 +72,7 @@ final class UpdateRouter
                     $done->execute(['id' => (int) $staged['id'], 'owner' => $context->userId]);
                     $this->telegram->sendMessage($chatId, '✅ Restore merge completed. Added ' . $result['inserted_rows']
                         . ' missing rows. Existing rows were not overwritten or deleted. Old Telegram update/delivery queues were skipped.');
-                } catch (\\Throwable $exception) {
+                } catch (\Throwable $exception) {
                     $this->telegram->sendMessage($chatId, 'Restore was not completed. The database transaction was rolled back; check private application logs.');
                 }
                 return;
@@ -169,12 +169,12 @@ final class UpdateRouter
             }
             @chmod($path, 0600);
             try {
-                (new \\App\\Telegram\\TelegramFileDownloader(Config::requireString('BOT_TOKEN')))->download($fileId, $path);
+                (new \App\Telegram\TelegramFileDownloader(Config::requireString('BOT_TOKEN')))->download($fileId, $path);
                 $pdo = Connection::make();
                 $service = new DatabaseBackupService($pdo);
                 $preview = $service->validateBackupFile($path);
                 $json = file_get_contents($path);
-                if (!is_string($json)) throw new \\RuntimeException('Could not read uploaded backup.');
+                if (!is_string($json)) throw new \RuntimeException('Could not read uploaded backup.');
                 $insert = $pdo->prepare("INSERT INTO bot_backup_staging (owner_user_id, backup_json, preview_json, status, expires_at) VALUES (:owner, :backup, :preview, 'pending', DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))");
                 $insert->execute([
                     'owner' => $context->userId,
@@ -191,7 +191,7 @@ final class UpdateRouter
                         ['text' => 'Cancel', 'callback_data' => 'backup:cancel:' . $stagingId],
                     ]]]]
                 );
-            } catch (\\Throwable $exception) {
+            } catch (\Throwable $exception) {
                 $this->telegram->sendMessage($context->chatId, 'Backup validation failed. No database data was restored.');
             } finally {
                 @unlink($path);

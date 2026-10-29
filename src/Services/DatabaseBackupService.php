@@ -100,6 +100,77 @@ final class DatabaseBackupService
         ];
     }
 
+
+    /**
+     * Safely merge backup records that do not already exist. Existing rows are never overwritten.
+     * Old Telegram update and delivery queues are deliberately skipped to prevent replay.
+     *
+     * @return array{inserted_rows:int,skipped_tables:list<string>}
+     */
+    public function restoreMissingRows(string $backupJson): array
+    {
+        if (strlen($backupJson) < 2 || strlen($backupJson) > self::MAX_BYTES) {
+            throw new RuntimeException('Backup data is outside the allowed size range.');
+        }
+        $path = tempnam(sys_get_temp_dir(), 'php-bot-restore-check-');
+        if ($path === false) throw new RuntimeException('Could not create a validation file.');
+        @chmod($path, 0600);
+        try {
+            if (file_put_contents($path, $backupJson, LOCK_EX) === false) {
+                throw new RuntimeException('Could not stage backup validation.');
+            }
+            $this->validateBackupFile($path);
+        } finally {
+            @unlink($path);
+        }
+
+        $data = json_decode($backupJson, true, 128, JSON_THROW_ON_ERROR);
+        $skip = ['schema_migrations', 'bot_backup_staging', 'telegram_updates', 'telegram_update_jobs',
+            'collection_delivery_jobs', 'collection_delivery_items', 'delivery_outgoing_messages'];
+        $tables = $data['tables'];
+        ksort($tables, SORT_STRING);
+        $inserted = 0;
+        $this->pdo->beginTransaction();
+        try {
+            // Repeated passes allow parent rows to arrive before dependent rows without disabling FK checks.
+            for ($pass = 0; $pass < 5; $pass++) {
+                foreach ($tables as $table => $tableData) {
+                    if (in_array($table, $skip, true)) continue;
+                    if (!is_string($table) || !preg_match('/^[A-Za-z0-9_]+$/', $table)) {
+                        throw new RuntimeException('Backup contains an invalid table name.');
+                    }
+                    foreach (($tableData['rows'] ?? []) as $row) {
+                        if (!is_array($row) || $row === []) continue;
+                        $columns = array_keys($row);
+                        foreach ($columns as $column) {
+                            if (!is_string($column) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+                                throw new RuntimeException('Backup contains an invalid column name.');
+                            }
+                        }
+                        $quoted = array_map(static fn(string $column): string => '`' . $column . '`', $columns);
+                        $placeholders = array_map(static fn(int $i): string => ':v' . $i, array_keys($columns));
+                        $sql = 'INSERT IGNORE INTO `' . $table . '` (' . implode(',', $quoted) . ') VALUES (' . implode(',', $placeholders) . ')';
+                        try {
+                            $statement = $this->pdo->prepare($sql);
+                            foreach (array_values($row) as $i => $value) $statement->bindValue(':v' . $i, $value);
+                            $statement->execute();
+                            $inserted += $statement->rowCount();
+                        } catch (\PDOException $exception) {
+                            // A missing parent may become available on the next pass.
+                            if (!str_contains(strtolower($exception->getMessage()), 'foreign key')) throw $exception;
+                        }
+                    }
+                }
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $exception) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw new RuntimeException('Restore merge failed; no partial changes were committed.', 0, $exception);
+        }
+
+        return ['inserted_rows' => $inserted, 'skipped_tables' => $skip];
+    }
+
     /** Create a secret-redacted logical backup in a private temporary file. */
     public function createTemporaryBackup(): string
     {

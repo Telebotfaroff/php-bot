@@ -194,6 +194,9 @@ final class DatabaseBackupService
             if (!preg_match('/^[A-Za-z0-9_]+$/', $table)) {
                 throw new RuntimeException('Unexpected database table name.');
             }
+            if ($table === 'bot_backup_staging') {
+                continue; // Never embed staged restore payloads inside a new backup.
+            }
             if ($table === 'schema_migrations') {
                 $payload['schema_migrations'] = $this->pdo
                     ->query('SELECT migration, applied_at FROM schema_migrations ORDER BY migration')

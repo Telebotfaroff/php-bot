@@ -84,6 +84,24 @@ try {
     @unlink($badBackupPath);
 }
 
+
+$restoreTestUser = random_int(510000000, 589999999);
+$restoreUserInsert = $pdo->prepare("INSERT INTO users (telegram_user_id, first_name, created_at, last_seen_at) VALUES (:id, 'Restore Test', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+$restoreUserInsert->execute(['id' => $restoreTestUser]);
+$restorePath = $backupService->createTemporaryBackup();
+try {
+    $restoreJson = file_get_contents($restorePath);
+    check(is_string($restoreJson) && !str_contains($restoreJson, 'bot_backup_staging'), 'backup excludes staged restore payloads');
+    $pdo->prepare('DELETE FROM users WHERE telegram_user_id = :id')->execute(['id' => $restoreTestUser]);
+    check($backupService->restoreMissingRows((string) $restoreJson)['inserted_rows'] >= 1, 'restore merge adds missing records');
+    $restoreUserCheck = $pdo->prepare('SELECT COUNT(*) FROM users WHERE telegram_user_id = :id');
+    $restoreUserCheck->execute(['id' => $restoreTestUser]);
+    check((int) $restoreUserCheck->fetchColumn() === 1, 'restore merge recovers a deleted user row');
+} finally {
+    @unlink($restorePath);
+    $pdo->prepare('DELETE FROM users WHERE telegram_user_id = :id')->execute(['id' => $restoreTestUser]);
+}
+
 $processor = new UpdateProcessor($pdo);
 $updateId = random_int(700000000, 799999999);
 $userId = random_int(800000000, 899999999);

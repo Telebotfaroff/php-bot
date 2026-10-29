@@ -26,7 +26,7 @@ $migrations = new MigrationRunner($pdo, dirname(__DIR__) . '/database/migrations
 $firstRun = $migrations->migrate();
 $secondRun = $migrations->migrate();
 
-check(count($firstRun) === 11, 'applies all migrations present on first run');
+check(count($firstRun) === 12, 'applies all migrations present on first run');
 check($secondRun === [], 'migration runner is idempotent');
 
 foreach ([
@@ -43,6 +43,7 @@ foreach ([
     'referral_attributions',
     'referral_rewards',
     'bot_search_events',
+    'bot_backup_staging',
 ] as $table) {
     $tableCheck = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table'

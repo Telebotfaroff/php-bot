@@ -40,6 +40,44 @@ final class UpdateRouter
                 $this->handleAdminCallback($update, $context);
                 return;
             }
+
+            if ($context->callbackData !== null && preg_match('/^backup:(restore|cancel):([1-9][0-9]{0,15})$/', $context->callbackData, $backupMatch)) {
+                if ($context->callbackId !== null) $this->telegram->answerCallbackQuery($context->callbackId);
+                if (!$this->admin->isOwner($context->userId)) return;
+                $chatId = $this->callbackChatId($update, (int) $context->userId);
+                $message = $update['callback_query']['message'] ?? [];
+                $chat = is_array($message) ? ($message['chat'] ?? []) : [];
+                if (!is_array($chat) || ($chat['type'] ?? '') !== 'private' || (string) ($chat['id'] ?? '') !== (string) $context->userId) {
+                    $this->telegram->sendMessage($chatId, 'Restore confirmation is only allowed in your private chat.');
+                    return;
+                }
+                try {
+                    $pdo = Connection::make();
+                    $query = $pdo->prepare("SELECT id, backup_json, expires_at FROM bot_backup_staging WHERE id = :id AND owner_user_id = :owner AND status = 'pending' LIMIT 1");
+                    $query->execute(['id' => (int) $backupMatch[2], 'owner' => $context->userId]);
+                    $staged = $query->fetch(\\PDO::FETCH_ASSOC);
+                    if (!is_array($staged) || strtotime((string) $staged['expires_at']) <= time()) {
+                        $this->telegram->sendMessage($chatId, 'This restore preview has expired. Upload the backup again.');
+                        return;
+                    }
+                    if ($backupMatch[1] === 'cancel') {
+                        $cancel = $pdo->prepare("UPDATE bot_backup_staging SET status = 'cancelled', backup_json = '' WHERE id = :id AND owner_user_id = :owner");
+                        $cancel->execute(['id' => (int) $staged['id'], 'owner' => $context->userId]);
+                        $this->telegram->sendMessage($chatId, 'Restore cancelled. No database records were changed.');
+                        return;
+                    }
+                    $service = new DatabaseBackupService($pdo);
+                    $result = $service->restoreMissingRows((string) $staged['backup_json']);
+                    $done = $pdo->prepare("UPDATE bot_backup_staging SET status = 'completed', backup_json = '' WHERE id = :id AND owner_user_id = :owner");
+                    $done->execute(['id' => (int) $staged['id'], 'owner' => $context->userId]);
+                    $this->telegram->sendMessage($chatId, '✅ Restore merge completed. Added ' . $result['inserted_rows']
+                        . ' missing rows. Existing rows were not overwritten or deleted. Old Telegram update/delivery queues were skipped.');
+                } catch (\\Throwable $exception) {
+                    $this->telegram->sendMessage($chatId, 'Restore was not completed. The database transaction was rolled back; check private application logs.');
+                }
+                return;
+            }
+
             if ($context->callbackData === 'wallet:get_coins') {
                 if ($context->callbackId !== null) {
                     $this->telegram->answerCallbackQuery($context->callbackId, ['text' => 'Coin verification provider is not configured yet.']);
@@ -106,6 +144,60 @@ final class UpdateRouter
         }
 
         if ($context->chatId === null || $context->userId === null) return;
+
+        
+        $incomingMessage = $update['message'] ?? null;
+        $incomingDocument = is_array($incomingMessage) ? ($incomingMessage['document'] ?? null) : null;
+        if (is_array($incomingDocument)) {
+            if (!$this->admin->isOwner($context->userId)) return;
+            $incomingChat = is_array($incomingMessage['chat'] ?? null) ? $incomingMessage['chat'] : [];
+            if (($incomingChat['type'] ?? '') !== 'private' || (string) ($incomingChat['id'] ?? '') !== (string) $context->userId) {
+                $this->telegram->sendMessage($context->chatId, 'For safety, upload restore files only in the owner’s private chat.');
+                return;
+            }
+            $fileName = (string) ($incomingDocument['file_name'] ?? '');
+            $fileId = (string) ($incomingDocument['file_id'] ?? '');
+            $fileSize = (int) ($incomingDocument['file_size'] ?? 0);
+            if (!str_ends_with(strtolower($fileName), '.json') || $fileId === '' || $fileSize < 2 || $fileSize > 8_000_000) {
+                $this->telegram->sendMessage($context->chatId, 'Upload a valid .json backup file smaller than 8 MB.');
+                return;
+            }
+            $path = tempnam(sys_get_temp_dir(), 'php-bot-restore-');
+            if ($path === false) {
+                $this->telegram->sendMessage($context->chatId, 'Could not stage the backup file.');
+                return;
+            }
+            @chmod($path, 0600);
+            try {
+                (new \\App\\Telegram\\TelegramFileDownloader(Config::requireString('BOT_TOKEN')))->download($fileId, $path);
+                $pdo = Connection::make();
+                $service = new DatabaseBackupService($pdo);
+                $preview = $service->validateBackupFile($path);
+                $json = file_get_contents($path);
+                if (!is_string($json)) throw new \\RuntimeException('Could not read uploaded backup.');
+                $insert = $pdo->prepare("INSERT INTO bot_backup_staging (owner_user_id, backup_json, preview_json, status, expires_at) VALUES (:owner, :backup, :preview, 'pending', DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))");
+                $insert->execute([
+                    'owner' => $context->userId,
+                    'backup' => $json,
+                    'preview' => json_encode($preview, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                ]);
+                $stagingId = (int) $pdo->lastInsertId();
+                $this->telegram->sendMessage($context->chatId,
+                    '⚠️ Restore dry run passed. Tables: ' . $preview['table_count'] . '; rows: ' . $preview['row_count']
+                    . '. This performs a MERGE: only missing records are added; existing records are never overwritten or deleted. Old Telegram update/delivery queues are skipped. This preview expires in 15 minutes.',
+                    ['reply_markup' => ['inline_keyboard' => [[
+                        ['text' => 'Confirm merge restore', 'callback_data' => 'backup:restore:' . $stagingId],
+                    ], [
+                        ['text' => 'Cancel', 'callback_data' => 'backup:cancel:' . $stagingId],
+                    ]]]]
+                );
+            } catch (\\Throwable $exception) {
+                $this->telegram->sendMessage($context->chatId, 'Backup validation failed. No database data was restored.');
+            } finally {
+                @unlink($path);
+            }
+            return;
+        }
 
         $parts = preg_split('/\s+/', trim((string) $context->text), 2);
         $rawCommand = is_array($parts) ? ($parts[0] ?? '') : '';

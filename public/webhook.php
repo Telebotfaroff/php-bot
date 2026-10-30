@@ -4,20 +4,9 @@ declare(strict_types=1);
 
 use App\Config\Config;
 use App\Database\Connection;
-use App\Database\SettingsRepository;
-use App\Database\UpdateOutbox;
 use App\Database\UpdateProcessor;
-use App\Security\AdminAuthorizer;
 use App\Security\WebhookVerifier;
-use App\Services\CollectionDeliveryService;
-use App\Services\PostWizardService;
-use App\Services\PremiumService;
-use App\Services\ReferralService;
-use App\Services\WalletService;
-use App\Services\AdminFeatureService;
 use App\Support\Logger;
-use App\Telegram\BotApiClient;
-use App\Telegram\UpdateRouter;
 
 require dirname(__DIR__) . '/src/Bootstrap.php';
 
@@ -61,22 +50,10 @@ try {
     $processor = new UpdateProcessor($pdo);
     $isNewUpdate = $processor->process($update);
 
-    // Always retry the durable job, including when Telegram redelivers a duplicate update.
-    $telegram = new BotApiClient();
-    $settings = new SettingsRepository($pdo);
-    $wizard = new PostWizardService($pdo, $telegram, $settings);
-    $delivery = new CollectionDeliveryService($pdo, $telegram, $settings);
-    $wallet = new WalletService($pdo, $settings);
-    $premium = new PremiumService($pdo);
-    $referrals = new ReferralService($pdo, $settings);
-    $router = new UpdateRouter($telegram, $settings, new AdminAuthorizer(), $wizard, $delivery, $wallet, $premium, $referrals, new AdminFeatureService($pdo));
-    $outbox = new UpdateOutbox($pdo, $router);
-    $dispatched = $outbox->dispatchOne((int) $updateId);
-
-    Logger::info('Telegram update accepted by durable outbox', [
+    // Acknowledge quickly. Background workers own all handler execution and retries.
+    Logger::info('Telegram update queued', [
         'update_id' => (int) $updateId,
         'new_update' => $isNewUpdate,
-        'dispatched_now' => $dispatched,
     ]);
 
     http_response_code(200);

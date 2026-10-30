@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Support;
+namespace App\\Support;
 
-use App\Config\Config;
+use App\\Config\\Config;
 use Throwable;
 
 final class Logger
@@ -29,6 +29,9 @@ final class Logger
         self::write('ERROR', $message, [
             'exception' => get_class($exception),
             'code' => (string) $exception->getCode(),
+            'error' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
         ]);
     }
 

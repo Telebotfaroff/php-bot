@@ -7,8 +7,18 @@ RUN apt-get update \
  && sed -i 's/Listen 80/Listen 8080/' /etc/apache2/ports.conf \
  && sed -i 's/<VirtualHost \\*:80>/<VirtualHost *:8080>/' /etc/apache2/sites-available/000-default.conf \
  && sed -i "s#DocumentRoot /var/www/html#DocumentRoot \\$APACHE_DOCUMENT_ROOT#" /etc/apache2/sites-available/000-default.conf \
- && printf '\\n<Directory /var/www/html/public>\\n Options -Indexes +FollowSymLinks\\n AllowOverride All\\n Require all granted\\n</Directory>\\n<Files \\"install.php\\">\\n Require all denied\\n</Files>\\n' >> /etc/apache2/apache2.conf \
  && rm -rf /var/lib/apt/lists/*
+RUN cat >> /etc/apache2/apache2.conf <<'APACHE'
+
+<Directory /var/www/html/public>
+    Options -Indexes +FollowSymLinks
+    AllowOverride All
+    Require all granted
+</Directory>
+<Files "install.php">
+    Require all denied
+</Files>
+APACHE
 WORKDIR /var/www/html
 COPY . /var/www/html/
 RUN chown -R www-data:www-data /var/www/html && mkdir -p /var/log/php-bot && chown -R www-data:www-data /var/log/php-bot

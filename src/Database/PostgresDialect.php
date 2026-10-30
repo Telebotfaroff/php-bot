@@ -13,7 +13,7 @@ final class PostgresDialect
         $sql = str_replace(chr(96), '"', $sql);
         $sql = preg_replace('/\bDATABASE\(\)/i', 'current_schema()', $sql) ?? $sql;
         $sql = preg_replace('/\bUTC_TIMESTAMP\(\)/i', "(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')", $sql) ?? $sql;
-        $sql = preg_replace_callback('/DATE_ADD\((CURRENT_TIMESTAMP|[A-Za-z_][A-Za-z0-9_.]*),\s*INTERVAL\s+(:[A-Za-z_][A-Za-z0-9_]*|[0-9]+)\s+(SECOND|MINUTE|HOUR|DAY)\)/i',
+        $sql = preg_replace_callback('/DATE_ADD\((.+),\s*INTERVAL\s+(:[A-Za-z_][A-Za-z0-9_]*|[0-9]+)\s+(SECOND|MINUTE|HOUR|DAY)\)/i',
             static function (array $m): string {
                 $unit = strtolower($m[3]);
                 return is_numeric($m[2]) ? '(' . $m[1] . " + INTERVAL '" . $m[2] . ' ' . $unit . "')" : '(' . $m[1] . ' + (' . $m[2] . " * INTERVAL '1 " . $unit . "'))";
@@ -29,7 +29,7 @@ final class PostgresDialect
                 return "TO_CHAR(" . trim($m[1]) . ", '" . $format . "')";
             }, $sql) ?? $sql;
         $sql = preg_replace('/SHOW\s+TABLES/i', "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() ORDER BY table_name", $sql) ?? $sql;
-        $sql = preg_replace_callback('/SHOW\s+COLUMNS\s+FROM\s+([A-Za-z0-9_]+)/i',
+        $sql = preg_replace_callback('/SHOW\s+COLUMNS\s+FROM\s+"?([A-Za-z0-9_]+)"?/i',
             static fn(array $m): string => "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = '" . $m[1] . "' ORDER BY ordinal_position", $sql) ?? $sql;
         $sql = preg_replace_callback("/GET_LOCK\('([^']+)'\s*,\s*[0-9]+\)/i",
             static fn(array $m): string => "pg_try_advisory_lock(hashtext('" . str_replace("'", "''", $m[1]) . "'))", $sql) ?? $sql;

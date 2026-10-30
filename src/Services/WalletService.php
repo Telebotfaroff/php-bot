@@ -76,7 +76,7 @@ final class WalletService
                 'user' => $userId, 'hash' => $hash, 'provider' => $provider, 'reward' => $reward,
             ]);
             $id = (int) $this->pdo->lastInsertId();
-            $expiry = $this->pdo->query('SELECT DATE_FORMAT(DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 24 HOUR), \'%Y-%m-%d %H:%i:%s\')')->fetchColumn();
+            $expiry = $this->pdo->query("SELECT TO_CHAR(CURRENT_TIMESTAMP + INTERVAL '24 hours', 'YYYY-MM-DD HH24:MI:SS')")->fetchColumn();
             $this->pdo->commit();
             return [
                 'id' => $id,
@@ -172,7 +172,7 @@ final class WalletService
             throw $exception;
         }
         $id = (int) $this->pdo->lastInsertId();
-        $query = $this->pdo->prepare('SELECT DATE_FORMAT(expires_at, \'%Y-%m-%d %H:%i:%s\') FROM promo_codes WHERE id = :id');
+        $query = $this->pdo->prepare('SELECT TO_CHAR(expires_at, 'YYYY-MM-DD HH24:MI:SS') FROM promo_codes WHERE id = :id');
         $query->execute(['id' => $id]);
         return ['id' => $id, 'code' => $code, 'reward' => $reward, 'max_uses' => $maxUses, 'expires_at' => (string) $query->fetchColumn()];
     }

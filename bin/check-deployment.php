@@ -32,7 +32,7 @@ $check('PHP runtime and extensions', static function (): string {
     if (PHP_VERSION_ID < 80100) {
         throw new RuntimeException('PHP 8.1 or newer is required; current version is ' . PHP_VERSION . '.');
     }
-    foreach (['curl', 'pdo_mysql'] as $extension) {
+    foreach (['curl', 'pdo_pgsql'] as $extension) {
         if (!extension_loaded($extension)) {
             throw new RuntimeException("Missing PHP extension: {$extension}.");
         }

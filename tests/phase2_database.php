@@ -46,7 +46,7 @@ foreach ([
     'bot_backup_staging',
 ] as $table) {
     $tableCheck = $pdo->prepare(
-        'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table'
+        'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = :table'
     );
     $tableCheck->execute(['table' => $table]);
     check((int) $tableCheck->fetchColumn() === 1, 'creates ' . $table . ' table');

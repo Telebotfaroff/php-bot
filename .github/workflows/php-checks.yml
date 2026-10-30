@@ -41,7 +41,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
-          extensions: curl, pdo_mysql
+          extensions: curl, pdo_pgsql
           coverage: none
 
       - name: Check PHP syntax

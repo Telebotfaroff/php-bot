@@ -19,8 +19,6 @@ final class Config
         $fileValues = [];
         $configFile = getenv('BOT_CONFIG_FILE');
         if (!is_string($configFile) || $configFile === '') {
-            // Default private location: sibling of the project directory, outside public_html
-            // when the project itself is deployed outside the document root.
             $configFile = dirname(__DIR__, 3) . '/private/php-bot-config.php';
         }
         if (is_string($configFile) && $configFile !== '' && is_file($configFile)) {
@@ -34,8 +32,8 @@ final class Config
         $keys = [
             'BOT_TOKEN', 'BOT_USERNAME', 'BOT_OWNER_ID', 'WEBHOOK_SECRET', 'SHORTENER_CALLBACK_SECRET',
             'WEBHOOK_URL', 'APP_ENV', 'LOG_FILE', 'TELEGRAM_API_BASE',
-            'DB_DSN', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_CHARSET',
-            'DB_SSL_MODE', 'DB_SSL_CA', 'AUTO_MIGRATE',
+            'DB_URL', 'DB_DSN', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_CHARSET',
+            'DB_SSL_MODE', 'DB_SSL_CA', 'DB_SSL_CA_PEM', 'AUTO_MIGRATE',
         ];
         $environment = [];
         foreach ($keys as $key) {

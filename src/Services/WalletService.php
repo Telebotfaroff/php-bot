@@ -172,7 +172,7 @@ final class WalletService
             throw $exception;
         }
         $id = (int) $this->pdo->lastInsertId();
-        $query = $this->pdo->prepare('SELECT TO_CHAR(expires_at, 'YYYY-MM-DD HH24:MI:SS') FROM promo_codes WHERE id = :id');
+        $query = $this->pdo->prepare("SELECT TO_CHAR(expires_at, 'YYYY-MM-DD HH24:MI:SS') FROM promo_codes WHERE id = :id");
         $query->execute(['id' => $id]);
         return ['id' => $id, 'code' => $code, 'reward' => $reward, 'max_uses' => $maxUses, 'expires_at' => (string) $query->fetchColumn()];
     }

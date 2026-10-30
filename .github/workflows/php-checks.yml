@@ -14,25 +14,25 @@ jobs:
     name: PHP syntax and database tests
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: test-root-password
-          MYSQL_DATABASE: php_bot_test
+          POSTGRES_PASSWORD: test-postgres-password
+          POSTGRES_DB: php_bot_test
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-root-password"
+          --health-cmd="pg_isready -U postgres -d php_bot_test"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
     env:
       DB_HOST: 127.0.0.1
-      DB_PORT: 3306
+      DB_PORT: 5432
       DB_NAME: php_bot_test
-      DB_USER: root
-      DB_PASSWORD: test-root-password
-      DB_CHARSET: utf8mb4
+      DB_USER: postgres
+      DB_PASSWORD: test-postgres-password
+      DB_SSL_MODE: disabled
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
